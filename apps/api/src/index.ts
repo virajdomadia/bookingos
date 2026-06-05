@@ -2,9 +2,13 @@ import express, { Express, Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
+import path from "path";
+import { fileURLToPath } from "url";
 import authRouter from "./routes/auth.js";
 
-dotenv.config();
+// Load .env from the correct directory
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 const app: Express = express();
 const port = process.env.PORT || 4000;
