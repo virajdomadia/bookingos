@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 
 interface User {
   userId: string;
@@ -24,10 +24,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Issue #5: Schedule refresh before token expires
+  const scheduleTokenRefresh = (expiresInSeconds: number) => {
+    // Clear any existing timer
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+    }
+
+    // Refresh 5 minutes before expiry (or at 1 minute if token is shorter)
+    const refreshBeforeExpiry = Math.max(expiresInSeconds - 5 * 60, 1 * 60);
+    const refreshDelayMs = refreshBeforeExpiry * 1000;
+
+    refreshTimerRef.current = setTimeout(() => {
+      silentRefresh();
+    }, refreshDelayMs);
+  };
 
   // Silent refresh on mount
   useEffect(() => {
     silentRefresh();
+
+    return () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
+    };
   }, []);
 
   const silentRefresh = async () => {
@@ -41,8 +64,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       );
 
       if (response.ok) {
-        const { accessToken } = await response.json();
+        const { accessToken, expiresIn } = await response.json();
         setAccessToken(accessToken);
+        // Issue #5: Schedule next refresh
+        if (expiresIn) {
+          scheduleTokenRefresh(expiresIn);
+        }
       } else {
         setAccessToken(null);
         setUser(null);
@@ -77,6 +104,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { accessToken, user } = await response.json();
       setAccessToken(accessToken);
       setUser(user);
+      // Issue #5: Schedule refresh
+      scheduleTokenRefresh(15 * 60); // 15-minute access token
     } finally {
       setIsLoading(false);
     }
@@ -107,6 +136,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { accessToken, user } = await response.json();
       setAccessToken(accessToken);
       setUser(user);
+      // Issue #5: Schedule refresh
+      scheduleTokenRefresh(15 * 60); // 15-minute access token
     } finally {
       setIsLoading(false);
     }
@@ -123,6 +154,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setAccessToken(null);
       setUser(null);
+      // Clear any pending refresh
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
     }
   };
 

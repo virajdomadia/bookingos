@@ -1,25 +1,25 @@
 import { Router, Request, Response } from "express";
 import type { Router as ExpressRouter } from "express";
 import { z } from "zod";
+import rateLimit from "express-rate-limit";
 import { generateTokens, verifyAccessToken } from "../utils/jwt.js";
 import { hashPassword, verifyPassword, validatePassword } from "../utils/password.js";
 import prisma from "../lib/prisma.js";
 
 const router: ExpressRouter = Router();
 
-// In-memory storage for refresh tokens only
-const refreshTokens: Record<
-  string,
-  {
-    userId: string;
-    tenantId: string;
-    expiresAt: number;
-  }
-> = {};
+// Rate limiting for auth endpoints (Issue #7: No Rate Limiting)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 attempts per IP
+  message: "Too many authentication attempts, please try again later",
+  standardHeaders: false,
+  legacyHeaders: false,
+});
 
 // Validation schemas
 const registerSchema = z.object({
-  tenantName: z.string().min(2, "Tenant name required"),
+  tenantName: z.string().min(2, "Tenant name required").max(100, "Tenant name too long"),
   email: z.string().email("Invalid email"),
   password: z.string().min(8, "Password must be 8+ characters"),
 });
@@ -30,7 +30,7 @@ const loginSchema = z.object({
 });
 
 // POST /auth/register
-router.post("/register", async (req: Request, res: Response) => {
+router.post("/register", authLimiter, async (req: Request, res: Response) => {
   try {
     const { tenantName, email, password } = registerSchema.parse(req.body);
 
@@ -48,11 +48,19 @@ router.post("/register", async (req: Request, res: Response) => {
       return res.status(409).json({ error: "Email already registered" });
     }
 
-    // Generate slug
+    // Generate slug (Issue #6: Slug Validation)
     const slug = tenantName
       .toLowerCase()
       .replace(/\s+/g, "-")
-      .replace(/[^a-z0-9-]/g, "");
+      .replace(/[^a-z0-9-]/g, "")
+      .substring(0, 50);
+
+    // Validate slug length
+    if (slug.length < 3) {
+      return res.status(400).json({
+        error: "Business name too short (need at least 3 characters after formatting)"
+      });
+    }
 
     // Check if slug already exists
     const existingTenant = await prisma.tenant.findUnique({
@@ -106,12 +114,15 @@ router.post("/register", async (req: Request, res: Response) => {
       role: "OWNER",
     });
 
-    // Store refresh token
-    refreshTokens[refreshToken] = {
-      userId: result.user.id,
-      tenantId: result.tenant.id,
-      expiresAt: Date.now() + refreshTokenExpiry * 1000,
-    };
+    // Store refresh token in database (Issue #1: In-Memory Refresh Token Storage)
+    const expiresAt = new Date(Date.now() + refreshTokenExpiry * 1000);
+    await prisma.refreshToken.create({
+      data: {
+        userId: result.user.id,
+        token: refreshToken,
+        expiresAt,
+      },
+    });
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
@@ -136,7 +147,7 @@ router.post("/register", async (req: Request, res: Response) => {
 });
 
 // POST /auth/login
-router.post("/login", async (req: Request, res: Response) => {
+router.post("/login", authLimiter, async (req: Request, res: Response) => {
   try {
     const { email, password } = loginSchema.parse(req.body);
 
@@ -145,13 +156,13 @@ router.post("/login", async (req: Request, res: Response) => {
       where: { email },
     });
     if (!user) {
-      return res.status(401).json({ error: "Invalid email or password" });
+      return res.status(401).json({ error: "Invalid credentials" });
     }
 
     // Verify password
     const passwordMatch = await verifyPassword(password, user.passwordHash);
     if (!passwordMatch) {
-      return res.status(401).json({ error: "Invalid email or password" });
+      return res.status(401).json({ error: "Invalid credentials" });
     }
 
     // Generate tokens
@@ -161,12 +172,15 @@ router.post("/login", async (req: Request, res: Response) => {
       role: user.role,
     });
 
-    // Store refresh token
-    refreshTokens[refreshToken] = {
-      userId: user.id,
-      tenantId: user.tenantId,
-      expiresAt: Date.now() + refreshTokenExpiry * 1000,
-    };
+    // Store refresh token in database (Issue #1: In-Memory Refresh Token Storage)
+    const expiresAt = new Date(Date.now() + refreshTokenExpiry * 1000);
+    await prisma.refreshToken.create({
+      data: {
+        userId: user.id,
+        token: refreshToken,
+        expiresAt,
+      },
+    });
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
@@ -194,53 +208,90 @@ router.post("/login", async (req: Request, res: Response) => {
 });
 
 // POST /auth/refresh
-router.post("/refresh", (req: Request, res: Response) => {
-  const refreshToken = req.cookies.refreshToken;
+router.post("/refresh", async (req: Request, res: Response) => {
+  try {
+    const refreshToken = req.cookies.refreshToken;
 
-  if (!refreshToken) {
-    return res.status(401).json({ error: "No refresh token" });
+    if (!refreshToken) {
+      return res.status(401).json({ error: "No refresh token" });
+    }
+
+    // Find refresh token in database (Issue #1: In-Memory Refresh Token Storage)
+    const tokenRecord = await prisma.refreshToken.findUnique({
+      where: { token: refreshToken },
+      include: { user: true },
+    });
+
+    if (!tokenRecord || tokenRecord.expiresAt < new Date()) {
+      // Clean up expired token
+      if (tokenRecord) {
+        await prisma.refreshToken.delete({
+          where: { id: tokenRecord.id },
+        });
+      }
+      return res.status(401).json({ error: "Refresh token expired or invalid" });
+    }
+
+    const user = tokenRecord.user;
+
+    // Generate new tokens
+    const { accessToken, refreshToken: newRefreshToken, refreshTokenExpiry } = generateTokens({
+      userId: user.id,
+      tenantId: user.tenantId,
+      role: user.role, // Issue #3: Role from DB
+    });
+
+    // Delete old token and create new one in transaction (Issue #1: DB-based)
+    await prisma.$transaction(async (tx) => {
+      await tx.refreshToken.delete({
+        where: { id: tokenRecord.id },
+      });
+
+      const expiresAt = new Date(Date.now() + refreshTokenExpiry * 1000);
+      await tx.refreshToken.create({
+        data: {
+          userId: user.id,
+          token: newRefreshToken,
+          expiresAt,
+        },
+      });
+    });
+
+    res.cookie("refreshToken", newRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: refreshTokenExpiry * 1000,
+      path: "/",
+    });
+
+    res.json({ accessToken, expiresIn: 15 * 60 }); // Issue #5: Include token expiry
+  } catch (error) {
+    console.error("Refresh error:", error);
+    res.status(500).json({ error: "Token refresh failed" });
   }
-
-  const tokenData = refreshTokens[refreshToken];
-  if (!tokenData || tokenData.expiresAt < Date.now()) {
-    delete refreshTokens[refreshToken];
-    return res.status(401).json({ error: "Refresh token expired" });
-  }
-
-  // Generate new tokens
-  const { accessToken, refreshToken: newRefreshToken, refreshTokenExpiry } = generateTokens({
-    userId: tokenData.userId,
-    tenantId: tokenData.tenantId,
-    role: "OWNER", // TODO: get from DB
-  });
-
-  // Delete old token and store new one
-  delete refreshTokens[refreshToken];
-  refreshTokens[newRefreshToken] = {
-    userId: tokenData.userId,
-    tenantId: tokenData.tenantId,
-    expiresAt: Date.now() + refreshTokenExpiry * 1000,
-  };
-
-  res.cookie("refreshToken", newRefreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    maxAge: refreshTokenExpiry * 1000,
-    path: "/",
-  });
-
-  res.json({ accessToken });
 });
 
 // POST /auth/logout
-router.post("/logout", (req: Request, res: Response) => {
-  const refreshToken = req.cookies.refreshToken;
-  if (refreshToken) {
-    delete refreshTokens[refreshToken];
+router.post("/logout", async (req: Request, res: Response) => {
+  try {
+    const refreshToken = req.cookies.refreshToken;
+
+    // Delete refresh token from database (Issue #1: DB-based)
+    if (refreshToken) {
+      await prisma.refreshToken.delete({
+        where: { token: refreshToken },
+      }).catch(() => {
+        // Token might already be deleted, that's OK
+      });
+    }
+
+    res.clearCookie("refreshToken");
+    res.json({ message: "Logged out" });
+  } catch (error) {
+    console.error("Logout error:", error);
+    res.status(500).json({ error: "Logout failed" });
   }
-  res.clearCookie("refreshToken");
-  res.json({ message: "Logged out" });
 });
 
 export default router;

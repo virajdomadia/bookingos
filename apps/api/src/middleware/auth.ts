@@ -44,13 +44,13 @@ export const authMiddleware = async (
   req.user = user;
   req.tenantId = user.tenantId;
 
-  // Set RLS context for this request
+  // Issue #2: Set RLS context for this request
   try {
-    // In production, this would be done with Prisma:
-    // await prisma.$executeRaw`SELECT set_config('app.tenant_id', ${user.tenantId}, true)`
-    // For now, we'll just set the tenant context in the request
+    const prisma = (await import("../lib/prisma.js")).default;
+    await prisma.$executeRaw`SELECT set_config('app.tenant_id', ${user.tenantId}, true)`;
     next();
   } catch (error) {
+    console.error("Failed to set tenant context:", error);
     return res.status(500).json({ error: "Failed to set tenant context" });
   }
 };
