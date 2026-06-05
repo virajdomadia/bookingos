@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
+import jwt, { JwtPayload } from "jsonwebtoken";
 
 declare global {
   namespace Express {
@@ -8,6 +8,8 @@ declare global {
         userId: string;
         tenantId: string;
         role: string;
+        iat?: number;
+        exp?: number;
       };
       tenantId?: string;
     }
@@ -27,43 +29,98 @@ export const authMiddleware = async (
   res: Response,
   next: NextFunction
 ) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith("Bearer ")
-    ? authHeader.slice(7)
-    : null;
-
-  if (!token) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
-  const user = verifyJWT(token);
-  if (!user) {
-    return res.status(401).json({ error: "Invalid or expired token" });
-  }
-
-  req.user = user;
-  req.tenantId = user.tenantId;
-
-  // Issue #2: Set RLS context for this request
   try {
-    const prisma = (await import("../lib/prisma.js")).default;
-    await prisma.$executeRaw`SELECT set_config('app.tenant_id', ${user.tenantId}, true)`;
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader) {
+      return res.status(401).json({
+        error: "Missing authorization header",
+        code: "UNAUTHORIZED",
+      });
+    }
+
+    if (!authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        error: "Invalid authorization header format",
+        code: "UNAUTHORIZED",
+      });
+    }
+
+    const token = authHeader.slice(7);
+
+    if (!token) {
+      return res.status(401).json({
+        error: "Missing access token",
+        code: "UNAUTHORIZED",
+      });
+    }
+
+    // Verify JWT
+    let user: any;
+    try {
+      user = jwt.verify(token, process.env.JWT_SECRET!);
+    } catch (error: any) {
+      if (error.name === "TokenExpiredError") {
+        return res.status(401).json({
+          error: "Access token expired",
+          code: "TOKEN_EXPIRED",
+        });
+      }
+      return res.status(401).json({
+        error: "Invalid access token",
+        code: "UNAUTHORIZED",
+      });
+    }
+
+    // Validate user payload
+    if (!user.userId || !user.tenantId || !user.role) {
+      return res.status(401).json({
+        error: "Invalid token payload",
+        code: "UNAUTHORIZED",
+      });
+    }
+
+    req.user = user;
+    req.tenantId = user.tenantId;
+
+    // Set RLS context for database queries
+    try {
+      const prisma = (await import("../lib/prisma.js")).default;
+      await prisma.$executeRaw`SELECT set_config('app.tenant_id', ${user.tenantId}, true)`;
+    } catch (error) {
+      console.error("Failed to set RLS context:", error);
+      return res.status(500).json({
+        error: "Failed to establish database context",
+        code: "INTERNAL_ERROR",
+      });
+    }
+
     next();
   } catch (error) {
-    console.error("Failed to set tenant context:", error);
-    return res.status(500).json({ error: "Failed to set tenant context" });
+    console.error("Auth middleware error:", error);
+    res.status(500).json({
+      error: "Internal server error",
+      code: "INTERNAL_ERROR",
+    });
   }
 };
 
 export const requireRole = (roles: string | string[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
-      return res.status(401).json({ error: "Unauthorized" });
+      return res.status(401).json({
+        error: "User not authenticated",
+        code: "UNAUTHORIZED",
+      });
     }
 
     const allowedRoles = Array.isArray(roles) ? roles : [roles];
+
     if (!allowedRoles.includes(req.user.role)) {
-      return res.status(403).json({ error: "Forbidden" });
+      return res.status(403).json({
+        error: `Insufficient permissions. Required role: ${allowedRoles.join(" or ")}`,
+        code: "FORBIDDEN",
+      });
     }
 
     next();

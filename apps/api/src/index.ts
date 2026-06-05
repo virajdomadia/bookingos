@@ -75,14 +75,18 @@ app.use(
 // Routes
 app.use("/auth", authRouter);
 
-// Health check
+// Import admin routes
+import adminRouter from "./routes/admin.js";
+app.use("/admin", adminRouter);
+
+// Health check (public)
 app.get("/health", (req: Request, res: Response) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// Placeholder routes
-app.get("/api/test", (req: Request, res: Response) => {
-  res.json({ message: "API is running" });
+// API status (public, for checking)
+app.get("/api/status", (req: Request, res: Response) => {
+  res.json({ status: "ok", version: "1.0.0", timestamp: new Date().toISOString() });
 });
 
 // Global error handler middleware (must be last)

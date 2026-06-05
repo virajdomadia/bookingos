@@ -1,89 +1,144 @@
 import { Router, Request, Response } from "express";
 import type { Router as ExpressRouter } from "express";
-import { z } from "zod";
+import { z, ZodError } from "zod";
 import rateLimit from "express-rate-limit";
 import { generateTokens, verifyAccessToken } from "../utils/jwt.js";
 import { hashPassword, verifyPassword, validatePassword } from "../utils/password.js";
 import prisma from "../lib/prisma.js";
+import { ApiError, AuthResponse, ErrorCode } from "../types/api.js";
 
 const router: ExpressRouter = Router();
 
-// Helper function to sanitize and validate slugs
+// ============================================================================
+// VALIDATION & NORMALIZATION
+// ============================================================================
+
 const sanitizeSlug = (name: string): string => {
   return name
     .toLowerCase()
     .trim()
-    .replace(/\s+/g, "-") // spaces → dashes
-    .replace(/[^a-z0-9-]/g, "") // remove invalid chars
-    .replace(/-+/g, "-") // collapse multiple dashes
-    .replace(/^-+|-+$/g, "") // trim leading/trailing dashes
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
     .substring(0, 50);
 };
 
-// Helper function to normalize email addresses
 const normalizeEmail = (email: string): string => {
   return email.toLowerCase().trim();
 };
 
-// Rate limiting for auth endpoints (Issue #7: No Rate Limiting)
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 attempts per IP
-  message: "Too many authentication attempts, please try again later",
-  standardHeaders: false,
-  legacyHeaders: false,
-});
+const validateEmailFormat = (email: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  return emailRegex.test(email) && email.length <= 255;
+};
 
-// Validation schemas
+// ============================================================================
+// VALIDATION SCHEMAS
+// ============================================================================
+
 const registerSchema = z.object({
-  tenantName: z.string().min(2, "Tenant name required").max(100, "Tenant name too long"),
-  email: z.string().email("Invalid email"),
-  password: z.string().min(8, "Password must be 8+ characters"),
+  tenantName: z
+    .string()
+    .min(2, "Business name must be at least 2 characters")
+    .max(100, "Business name must be at most 100 characters")
+    .trim(),
+  email: z.string().email("Invalid email format").max(255),
+  password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
 const loginSchema = z.object({
-  email: z.string().email("Invalid email"),
-  password: z.string().min(1, "Password required"),
+  email: z.string().email("Invalid email format"),
+  password: z.string().min(1, "Password is required"),
 });
 
-// POST /auth/register
+// ============================================================================
+// RATE LIMITING
+// ============================================================================
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: "Too many authentication attempts, please try again later",
+  standardHeaders: false,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return req.ip || req.socket.remoteAddress || "unknown";
+  },
+  skip: (req) => {
+    return process.env.NODE_ENV === "development" && req.query.skipRateLimit === "true";
+  },
+});
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+const sendError = (res: Response, status: number, error: string, code: ErrorCode, details?: any) => {
+  const errorResponse: ApiError = { error, code };
+  if (details && process.env.NODE_ENV === "development") {
+    errorResponse.details = details;
+  }
+  res.status(status).json(errorResponse);
+};
+
+const sendSuccess = (res: Response, data: any, status: number = 200) => {
+  res.status(status).json({ data });
+};
+
+// ============================================================================
+// ROUTES: POST /auth/register
+// ============================================================================
+
 router.post("/register", authLimiter, async (req: Request, res: Response) => {
   try {
+    // Parse request body
     const { tenantName, email: rawEmail, password } = registerSchema.parse(req.body);
 
     // Normalize email
     const email = normalizeEmail(rawEmail);
 
+    // Validate email format (additional check)
+    if (!validateEmailFormat(email)) {
+      return sendError(res, 400, "Invalid email format", ErrorCode.INVALID_EMAIL);
+    }
+
     // Validate password strength
     const passwordValidation = validatePassword(password);
     if (!passwordValidation.valid) {
-      return res.status(400).json({ error: passwordValidation.error });
+      return sendError(
+        res,
+        400,
+        passwordValidation.error || "Password does not meet requirements",
+        ErrorCode.WEAK_PASSWORD
+      );
     }
 
-    // Check if user already exists
+    // Check email uniqueness
     const existingUser = await prisma.user.findFirst({
       where: { email },
     });
     if (existingUser) {
-      return res.status(409).json({ error: "Email already registered" });
+      return sendError(res, 409, "Email is already registered", ErrorCode.EMAIL_TAKEN);
     }
 
-    // Generate and sanitize slug
+    // Sanitize and validate slug
     const slug = sanitizeSlug(tenantName);
-
-    // Validate slug is valid
     if (slug.length < 3) {
-      return res.status(400).json({
-        error: "Business name too short (need at least 3 characters after formatting)"
-      });
+      return sendError(
+        res,
+        400,
+        "Business name is too short. Must have at least 3 alphanumeric characters.",
+        ErrorCode.VALIDATION_ERROR
+      );
     }
 
-    // Check if slug already exists
+    // Check slug uniqueness
     const existingTenant = await prisma.tenant.findUnique({
       where: { slug },
     });
     if (existingTenant) {
-      return res.status(409).json({ error: "Business name already taken" });
+      return sendError(res, 409, "This business name is already taken", ErrorCode.SLUG_TAKEN);
     }
 
     // Hash password
@@ -91,7 +146,6 @@ router.post("/register", authLimiter, async (req: Request, res: Response) => {
 
     // Create tenant, schedule, and user in transaction
     const result = await prisma.$transaction(async (tx) => {
-      // Create tenant
       const tenant = await tx.tenant.create({
         data: {
           name: tenantName,
@@ -99,7 +153,6 @@ router.post("/register", authLimiter, async (req: Request, res: Response) => {
         },
       });
 
-      // Create schedule with default settings
       await tx.schedule.create({
         data: {
           tenantId: tenant.id,
@@ -110,7 +163,6 @@ router.post("/register", authLimiter, async (req: Request, res: Response) => {
         },
       });
 
-      // Create user
       const user = await tx.user.create({
         data: {
           tenantId: tenant.id,
@@ -130,7 +182,7 @@ router.post("/register", authLimiter, async (req: Request, res: Response) => {
       role: "OWNER",
     });
 
-    // Store refresh token in database (Issue #1: In-Memory Refresh Token Storage)
+    // Store refresh token in database
     const expiresAt = new Date(Date.now() + refreshTokenExpiry * 1000);
     await prisma.refreshToken.create({
       data: {
@@ -140,6 +192,7 @@ router.post("/register", authLimiter, async (req: Request, res: Response) => {
       },
     });
 
+    // Set refresh token cookie
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -148,40 +201,57 @@ router.post("/register", authLimiter, async (req: Request, res: Response) => {
       path: "/",
     });
 
-    res.status(201).json({
+    // Send success response
+    const authResponse: AuthResponse = {
       accessToken,
-      user: { userId: result.user.id, email: result.user.email, role: result.user.role },
-      tenant: { id: result.tenant.id, name: result.tenant.name, slug: result.tenant.slug },
-    });
+      expiresIn: 15 * 60, // 15 minutes
+      user: {
+        userId: result.user.id,
+        email: result.user.email,
+        role: result.user.role,
+      },
+      tenant: {
+        id: result.tenant.id,
+        name: result.tenant.name,
+        slug: result.tenant.slug,
+      },
+    };
+
+    res.status(201).json({ data: authResponse });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: error.errors[0].message });
+    if (error instanceof ZodError) {
+      const firstError = error.errors[0];
+      return sendError(res, 400, firstError.message, ErrorCode.VALIDATION_ERROR);
     }
+
     console.error("Register error:", error);
-    res.status(500).json({ error: "Registration failed" });
+    sendError(res, 500, "Registration failed. Please try again.", ErrorCode.INTERNAL_ERROR);
   }
 });
 
-// POST /auth/login
+// ============================================================================
+// ROUTES: POST /auth/login
+// ============================================================================
+
 router.post("/login", authLimiter, async (req: Request, res: Response) => {
   try {
     const { email: rawEmail, password } = loginSchema.parse(req.body);
-
-    // Normalize email for consistent lookup
     const email = normalizeEmail(rawEmail);
 
     // Find user
     const user = await prisma.user.findFirst({
       where: { email },
+      include: { tenant: true },
     });
+
     if (!user) {
-      return res.status(401).json({ error: "Invalid credentials" });
+      return sendError(res, 401, "Invalid credentials", ErrorCode.INVALID_CREDENTIALS);
     }
 
     // Verify password
     const passwordMatch = await verifyPassword(password, user.passwordHash);
     if (!passwordMatch) {
-      return res.status(401).json({ error: "Invalid credentials" });
+      return sendError(res, 401, "Invalid credentials", ErrorCode.INVALID_CREDENTIALS);
     }
 
     // Generate tokens
@@ -191,7 +261,7 @@ router.post("/login", authLimiter, async (req: Request, res: Response) => {
       role: user.role,
     });
 
-    // Store refresh token in database (Issue #1: In-Memory Refresh Token Storage)
+    // Store refresh token in database
     const expiresAt = new Date(Date.now() + refreshTokenExpiry * 1000);
     await prisma.refreshToken.create({
       data: {
@@ -201,6 +271,7 @@ router.post("/login", authLimiter, async (req: Request, res: Response) => {
       },
     });
 
+    // Set refresh token cookie
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -209,46 +280,54 @@ router.post("/login", authLimiter, async (req: Request, res: Response) => {
       path: "/",
     });
 
-    res.json({
+    // Send success response
+    const authResponse: AuthResponse = {
       accessToken,
+      expiresIn: 15 * 60,
       user: {
         userId: user.id,
         email: user.email,
         role: user.role,
       },
-    });
+    };
+
+    res.json({ data: authResponse });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: error.errors[0].message });
+    if (error instanceof ZodError) {
+      const firstError = error.errors[0];
+      return sendError(res, 400, firstError.message, ErrorCode.VALIDATION_ERROR);
     }
+
     console.error("Login error:", error);
-    res.status(500).json({ error: "Login failed" });
+    sendError(res, 500, "Login failed. Please try again.", ErrorCode.INTERNAL_ERROR);
   }
 });
 
-// POST /auth/refresh
+// ============================================================================
+// ROUTES: POST /auth/refresh
+// ============================================================================
+
 router.post("/refresh", async (req: Request, res: Response) => {
   try {
     const refreshToken = req.cookies.refreshToken;
 
     if (!refreshToken) {
-      return res.status(401).json({ error: "No refresh token" });
+      return sendError(res, 401, "No refresh token found", ErrorCode.UNAUTHORIZED);
     }
 
-    // Find refresh token in database (Issue #1: In-Memory Refresh Token Storage)
+    // Find refresh token in database
     const tokenRecord = await prisma.refreshToken.findUnique({
       where: { token: refreshToken },
       include: { user: true },
     });
 
     if (!tokenRecord || tokenRecord.expiresAt < new Date()) {
-      // Clean up expired token
       if (tokenRecord) {
         await prisma.refreshToken.delete({
           where: { id: tokenRecord.id },
         });
       }
-      return res.status(401).json({ error: "Refresh token expired or invalid" });
+      return sendError(res, 401, "Refresh token expired or invalid", ErrorCode.TOKEN_EXPIRED);
     }
 
     const user = tokenRecord.user;
@@ -257,10 +336,10 @@ router.post("/refresh", async (req: Request, res: Response) => {
     const { accessToken, refreshToken: newRefreshToken, refreshTokenExpiry } = generateTokens({
       userId: user.id,
       tenantId: user.tenantId,
-      role: user.role, // Issue #3: Role from DB
+      role: user.role,
     });
 
-    // Delete old token and create new one in transaction (Issue #1: DB-based)
+    // Delete old token and create new one
     await prisma.$transaction(async (tx) => {
       await tx.refreshToken.delete({
         where: { id: tokenRecord.id },
@@ -276,6 +355,7 @@ router.post("/refresh", async (req: Request, res: Response) => {
       });
     });
 
+    // Set new refresh token cookie
     res.cookie("refreshToken", newRefreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -284,32 +364,39 @@ router.post("/refresh", async (req: Request, res: Response) => {
       path: "/",
     });
 
-    res.json({ accessToken, expiresIn: 15 * 60 }); // Issue #5: Include token expiry
+    res.json({
+      data: {
+        accessToken,
+        expiresIn: 15 * 60,
+      },
+    });
   } catch (error) {
     console.error("Refresh error:", error);
-    res.status(500).json({ error: "Token refresh failed" });
+    sendError(res, 500, "Token refresh failed", ErrorCode.INTERNAL_ERROR);
   }
 });
 
-// POST /auth/logout
+// ============================================================================
+// ROUTES: POST /auth/logout
+// ============================================================================
+
 router.post("/logout", async (req: Request, res: Response) => {
   try {
     const refreshToken = req.cookies.refreshToken;
 
-    // Delete refresh token from database (Issue #1: DB-based)
     if (refreshToken) {
       await prisma.refreshToken.delete({
         where: { token: refreshToken },
       }).catch(() => {
-        // Token might already be deleted, that's OK
+        // Token might already be deleted, that's fine
       });
     }
 
     res.clearCookie("refreshToken");
-    res.json({ message: "Logged out" });
+    res.json({ data: { message: "Logged out successfully" } });
   } catch (error) {
     console.error("Logout error:", error);
-    res.status(500).json({ error: "Logout failed" });
+    sendError(res, 500, "Logout failed", ErrorCode.INTERNAL_ERROR);
   }
 });
 
