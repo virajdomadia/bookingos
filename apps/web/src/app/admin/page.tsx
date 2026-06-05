@@ -1,13 +1,21 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import { DashboardLoadingSkeleton } from "@/components/LoadingSkeleton";
+import api from "@/lib/api";
+
+interface Tenant {
+  name: string;
+  slug: string;
+  primaryColor: string;
+}
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const { accessToken, user, isLoading, logout, error, clearError } = useAuth();
+  const { accessToken, user, isLoading, logout } = useAuth();
+  const [tenant, setTenant] = useState<Tenant | null>(null);
 
   useEffect(() => {
     if (!isLoading && !accessToken) {
@@ -15,13 +23,10 @@ export default function AdminDashboard() {
     }
   }, [accessToken, isLoading, router]);
 
-  if (isLoading) {
-    return <DashboardLoadingSkeleton />;
-  }
-
-  if (!accessToken || !user) {
-    return null; // Redirect is handled via useEffect
-  }
+  useEffect(() => {
+    if (!accessToken) return;
+    api.get("/admin/tenant").then((res) => setTenant(res.data.data)).catch(() => null);
+  }, [accessToken]);
 
   const handleLogout = async () => {
     try {
@@ -32,236 +37,101 @@ export default function AdminDashboard() {
     }
   };
 
-  const styles = {
-    container: {
-      minHeight: "100vh",
-      backgroundColor: "#f3f4f6",
-      fontFamily: "system-ui, -apple-system, sans-serif",
-    },
-    header: {
-      backgroundColor: "white",
-      boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1)",
-      padding: "1.5rem",
-      display: "flex" as const,
-      justifyContent: "space-between" as const,
-      alignItems: "center" as const,
-    },
-    title: {
-      fontSize: "1.5rem",
-      fontWeight: "bold" as const,
-    },
-    button: {
-      padding: "0.5rem 1rem",
-      backgroundColor: "#ef4444",
-      color: "white",
-      border: "none",
-      borderRadius: "0.375rem",
-      cursor: "pointer",
-      fontSize: "0.875rem",
-      fontWeight: "500" as const,
-    },
-    content: {
-      padding: "2rem",
-      maxWidth: "1200px",
-      margin: "0 auto",
-    },
-    card: {
-      backgroundColor: "white",
-      padding: "1.5rem",
-      borderRadius: "0.5rem",
-      boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1)",
-      marginBottom: "1.5rem",
-    },
-    errorAlert: {
-      backgroundColor: "#fee2e2",
-      border: "1px solid #fecaca",
-      color: "#991b1b",
-      padding: "1rem",
-      borderRadius: "0.375rem",
-      marginBottom: "1rem",
-      fontSize: "0.875rem",
-      display: "flex" as const,
-      justifyContent: "space-between" as const,
-      alignItems: "center" as const,
-    },
-    errorClose: {
-      background: "none",
-      border: "none",
-      color: "#991b1b",
-      cursor: "pointer",
-      fontSize: "1.25rem",
-      padding: 0,
-    },
-    userInfo: {
-      display: "grid" as const,
-      gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-      gap: "1rem",
-      marginBottom: "1.5rem",
-    },
-    infoItem: {
-      backgroundColor: "#f9fafb",
-      padding: "1rem",
-      borderRadius: "0.375rem",
-      borderLeft: "4px solid #3b82f6",
-    },
-    label: {
-      fontSize: "0.75rem",
-      textTransform: "uppercase" as const,
-      color: "#6b7280",
-      fontWeight: "bold" as const,
-      marginBottom: "0.25rem",
-    },
-    value: {
-      fontSize: "1rem",
-      color: "#111827",
-      fontWeight: "500" as const,
-    },
-    nav: {
-      display: "flex" as const,
-      gap: "1rem",
-      marginTop: "1.5rem",
-      flexWrap: "wrap" as const,
-    },
-    navLink: {
-      padding: "0.75rem 1.5rem",
-      backgroundColor: "#3b82f6",
-      color: "white",
-      border: "none",
-      borderRadius: "0.375rem",
-      cursor: "pointer",
-      fontSize: "0.875rem",
-      fontWeight: "500" as const,
-    },
-    section: {
-      marginTop: "1.5rem",
-    },
-    sectionTitle: {
-      fontSize: "1.125rem",
-      fontWeight: "bold" as const,
-      marginBottom: "1rem",
-    },
-  };
+  if (isLoading) {
+    return (
+      <div style={s.container}>
+        <div style={{ textAlign: "center", paddingTop: "6rem", color: "#6b7280" }}>Loading...</div>
+      </div>
+    );
+  }
+
+  if (!accessToken || !user) return null;
+
+  const navItems = [
+    { href: "/admin/schedule", label: "Schedule & Branding", icon: "📋", description: "Working hours, breaks, timezone, logo" },
+    { href: "/admin/services", label: "Services", icon: "⚙️", description: "Manage your bookable services" },
+    { href: "/admin/bookings", label: "Bookings", icon: "📅", description: "View and manage appointments", comingSoon: true },
+    { href: "/admin/staff", label: "Staff", icon: "👥", description: "Manage team members and roles", comingSoon: true },
+  ];
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <h1 style={styles.title}>📊 Admin Dashboard</h1>
-        <button style={styles.button} onClick={handleLogout}>
-          🚪 Logout
-        </button>
+    <div style={s.container}>
+      <div style={s.header}>
+        <div>
+          <h1 style={s.title}>{tenant?.name || "Admin Dashboard"}</h1>
+          {tenant && <span style={s.slugBadge}>/book/{tenant.slug}</span>}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <span style={s.emailBadge}>{user.email}</span>
+          <button style={s.logoutBtn} onClick={handleLogout}>Logout</button>
+        </div>
       </div>
 
-      <div style={styles.content}>
-        {/* Error Alert */}
-        {error && (
-          <div style={styles.errorAlert}>
-            <div>
-              <strong>⚠️ Notice:</strong> {error}
+      <div style={s.content}>
+        {/* KPI placeholder */}
+        <div style={s.kpiRow}>
+          {[
+            { label: "Today's Bookings", value: "—" },
+            { label: "This Week", value: "—" },
+            { label: "Pending", value: "—" },
+          ].map(({ label, value }) => (
+            <div key={label} style={s.kpiCard}>
+              <div style={s.kpiValue}>{value}</div>
+              <div style={s.kpiLabel}>{label}</div>
             </div>
-            <button style={styles.errorClose} onClick={clearError}>
-              ×
-            </button>
-          </div>
-        )}
-
-        {/* Welcome Card */}
-        <div style={styles.card}>
-          <h2 style={{ marginBottom: "1rem", fontSize: "1.25rem" }}>
-            👋 Welcome, {user.email}!
-          </h2>
-          <div style={styles.userInfo}>
-            <div style={styles.infoItem}>
-              <div style={styles.label}>User ID</div>
-              <div style={styles.value}>{user.userId.slice(0, 8)}...</div>
-            </div>
-            <div style={styles.infoItem}>
-              <div style={styles.label}>Email</div>
-              <div style={styles.value}>{user.email}</div>
-            </div>
-            <div style={styles.infoItem}>
-              <div style={styles.label}>Role</div>
-              <div style={styles.value}>👤 {user.role}</div>
-            </div>
-            <div style={styles.infoItem}>
-              <div style={styles.label}>Status</div>
-              <div style={styles.value}>✓ Authenticated</div>
-            </div>
-          </div>
-
-          <div style={styles.nav}>
-            <button style={styles.navLink}>📅 Bookings (Coming Soon)</button>
-            <button style={styles.navLink}>⚙️ Services (Coming Soon)</button>
-            <button style={styles.navLink}>📋 Schedule (Coming Soon)</button>
-            <button style={styles.navLink}>👥 Staff (Coming Soon)</button>
-            <button style={styles.navLink}>🎨 Branding (Coming Soon)</button>
-          </div>
+          ))}
         </div>
 
-        {/* Implementation Status */}
-        <div style={styles.card}>
-          <h3 style={styles.sectionTitle}>📈 Implementation Status</h3>
-
-          <div style={{ color: "#6b7280", lineHeight: "1.8" }}>
-            <h4 style={{ marginTop: 0, marginBottom: "0.75rem", color: "#374151" }}>
-              ✅ Phase 1 Complete (F0 + F1)
-            </h4>
-            <ul style={{ marginLeft: "1.5rem" }}>
-              <li>✓ Database schema and migrations</li>
-              <li>✓ User authentication (register, login, refresh, logout)</li>
-              <li>✓ JWT token management</li>
-              <li>✓ httpOnly cookie security</li>
-              <li>✓ Password hashing (bcrypt 12 rounds)</li>
-              <li>✓ Rate limiting (5 attempts/15 min)</li>
-              <li>✓ RLS multi-tenant isolation</li>
-              <li>✓ Error handling & validation</li>
-              <li>✓ Graceful shutdown handlers</li>
-            </ul>
-
-            <h4 style={{ marginTop: "1.5rem", marginBottom: "0.75rem", color: "#374151" }}>
-              🔜 Phase 2 Roadmap (F2 + F3)
-            </h4>
-            <ul style={{ marginLeft: "1.5rem" }}>
-              <li>Schedule management (GET/PUT endpoints)</li>
-              <li>Service CRUD operations</li>
-              <li>Admin dashboard features</li>
-              <li>Form validation & real-time feedback</li>
-              <li>Loading states & skeletons</li>
-              <li>Error boundaries & recovery</li>
-            </ul>
-
-            <h4 style={{ marginTop: "1.5rem", marginBottom: "0.75rem", color: "#374151" }}>
-              🌟 Quality Improvements
-            </h4>
-            <ul style={{ marginLeft: "1.5rem" }}>
-              <li>✓ Comprehensive error handling</li>
-              <li>✓ Standardized API responses</li>
-              <li>✓ Strong password validation</li>
-              <li>✓ Email normalization</li>
-              <li>✓ Slug sanitization</li>
-              <li>✓ Silent token refresh with retry</li>
-              <li>✓ Network failure recovery</li>
-              <li>✓ Loading skeletons</li>
-              <li>✓ Error boundaries</li>
-            </ul>
-          </div>
+        {/* Nav Grid */}
+        <div style={s.navGrid}>
+          {navItems.map(({ href, label, icon, description, comingSoon }) =>
+            comingSoon ? (
+              <div key={href} style={{ ...s.navCard, ...s.navCardDisabled }}>
+                <div style={s.navIcon}>{icon}</div>
+                <div style={s.navLabel}>{label}</div>
+                <div style={s.navDesc}>{description}</div>
+                <span style={s.comingSoonBadge}>Coming soon</span>
+              </div>
+            ) : (
+              <Link key={href} href={href} style={{ ...s.navCard, textDecoration: "none" }}>
+                <div style={s.navIcon}>{icon}</div>
+                <div style={s.navLabel}>{label}</div>
+                <div style={s.navDesc}>{description}</div>
+              </Link>
+            )
+          )}
         </div>
 
-        {/* Next Steps */}
-        <div style={styles.card}>
-          <h3 style={styles.sectionTitle}>🚀 Next Steps</h3>
-          <p style={{ color: "#6b7280", lineHeight: "1.6" }}>
-            The foundation is solid! Phase 2 will introduce schedule and service management. The auth
-            system is now production-ready with:
-          </p>
-          <ul style={{ color: "#6b7280", marginLeft: "1.5rem" }}>
-            <li>Robust error handling and recovery</li>
-            <li>Network resilience with automatic retries</li>
-            <li>User-friendly error messages</li>
-            <li>Graceful degradation</li>
-            <li>Full TypeScript type safety</li>
-          </ul>
+        {/* Role info */}
+        <div style={s.roleCard}>
+          <span style={s.roleLabel}>Signed in as</span>
+          <span style={s.roleBadge}>{user.role}</span>
         </div>
       </div>
     </div>
   );
 }
+
+const s: Record<string, React.CSSProperties> = {
+  container: { minHeight: "100vh", backgroundColor: "#f3f4f6", fontFamily: "system-ui, -apple-system, sans-serif" },
+  header: { backgroundColor: "white", boxShadow: "0 1px 3px rgba(0,0,0,0.1)", padding: "1rem 1.5rem", display: "flex", justifyContent: "space-between", alignItems: "center" },
+  title: { fontSize: "1.25rem", fontWeight: "bold", margin: 0 },
+  slugBadge: { fontSize: "0.75rem", color: "#6b7280", marginTop: "0.25rem", display: "block" },
+  emailBadge: { fontSize: "0.8125rem", color: "#6b7280" },
+  logoutBtn: { padding: "0.375rem 0.875rem", backgroundColor: "#fee2e2", color: "#dc2626", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: "500" },
+  content: { padding: "1.5rem", maxWidth: "900px", margin: "0 auto" },
+  kpiRow: { display: "flex", gap: "1rem", marginBottom: "1.5rem", flexWrap: "wrap" },
+  kpiCard: { flex: 1, minWidth: "120px", backgroundColor: "white", padding: "1.25rem", borderRadius: "0.5rem", boxShadow: "0 1px 3px rgba(0,0,0,0.1)", textAlign: "center" },
+  kpiValue: { fontSize: "1.875rem", fontWeight: "bold", color: "#111827" },
+  kpiLabel: { fontSize: "0.75rem", color: "#6b7280", marginTop: "0.25rem", textTransform: "uppercase", letterSpacing: "0.05em" },
+  navGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "1rem" },
+  navCard: { backgroundColor: "white", padding: "1.5rem", borderRadius: "0.5rem", boxShadow: "0 1px 3px rgba(0,0,0,0.1)", cursor: "pointer", transition: "box-shadow 0.15s", color: "inherit", display: "flex", flexDirection: "column", gap: "0.375rem" },
+  navCardDisabled: { opacity: 0.5, cursor: "default" },
+  navIcon: { fontSize: "1.5rem" },
+  navLabel: { fontWeight: "600", fontSize: "0.9375rem", color: "#111827" },
+  navDesc: { fontSize: "0.8125rem", color: "#6b7280", lineHeight: 1.4 },
+  comingSoonBadge: { marginTop: "0.5rem", fontSize: "0.6875rem", backgroundColor: "#f3f4f6", color: "#9ca3af", padding: "0.125rem 0.5rem", borderRadius: "999px", alignSelf: "flex-start", border: "1px solid #e5e7eb" },
+  roleCard: { backgroundColor: "white", padding: "0.875rem 1.25rem", borderRadius: "0.5rem", boxShadow: "0 1px 3px rgba(0,0,0,0.1)", display: "flex", alignItems: "center", gap: "0.5rem" },
+  roleLabel: { fontSize: "0.8125rem", color: "#6b7280" },
+  roleBadge: { fontSize: "0.75rem", backgroundColor: "#ede9fe", color: "#6d28d9", padding: "0.125rem 0.625rem", borderRadius: "999px", fontWeight: "600" },
+};

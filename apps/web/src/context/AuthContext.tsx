@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       lastRefreshAttempt.current = now;
       refreshRetryCount.current = 0;
 
-      const attemptRefresh = async (attempt: number): Promise<boolean> => {
+      const attemptRefresh = async (_attempt: number): Promise<boolean> => {
         try {
           const response = await fetch(
             `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/auth/refresh`,

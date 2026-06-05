@@ -65,7 +65,7 @@ router.put("/schedule", requireRole(["OWNER", "ADMIN"]), async (req: Request, re
       return sendError(res, 400, "Invalid workEnd format. Use HH:MM (00:00–23:59)", ErrorCode.VALIDATION_ERROR);
     }
 
-    if (slotInterval && (slotInterval < 5 || slotInterval > 120)) {
+    if (slotInterval !== undefined && (typeof slotInterval !== "number" || slotInterval < 5 || slotInterval > 120)) {
       return sendError(
         res,
         400,
@@ -74,17 +74,25 @@ router.put("/schedule", requireRole(["OWNER", "ADMIN"]), async (req: Request, re
       );
     }
 
+    if (workingDays !== undefined) {
+      const hasActiveDay = typeof workingDays === "object" && workingDays !== null &&
+        Object.values(workingDays).some(Boolean);
+      if (!hasActiveDay) {
+        return sendError(res, 400, "At least one working day must be active", ErrorCode.VALIDATION_ERROR);
+      }
+    }
+
     // Update schedule
     const updatedSchedule = await prisma.schedule.update({
       where: { tenantId: req.tenantId },
       data: {
-        ...(timezone && { timezone }),
-        ...(workStart && { workStart }),
-        ...(workEnd && { workEnd }),
-        ...(slotInterval && { slotInterval }),
-        ...(breakTimes && { breakTimes }),
+        ...(timezone !== undefined && { timezone }),
+        ...(workStart !== undefined && { workStart }),
+        ...(workEnd !== undefined && { workEnd }),
+        ...(slotInterval !== undefined && { slotInterval }),
+        ...(breakTimes !== undefined && { breakTimes }),
         ...(bufferTime !== undefined && { bufferTime }),
-        ...(workingDays && { workingDays }),
+        ...(workingDays !== undefined && { workingDays }),
       },
     });
 
@@ -255,5 +263,68 @@ router.delete(
     }
   }
 );
+
+// ============================================================================
+// GET /admin/tenant
+// ============================================================================
+
+router.get("/tenant", requireRole(["OWNER", "ADMIN", "STAFF"]), async (req: Request, res: Response) => {
+  try {
+    if (!req.tenantId) {
+      return sendError(res, 401, "Tenant ID not found in context", ErrorCode.UNAUTHORIZED);
+    }
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: req.tenantId },
+      select: { id: true, name: true, slug: true, logoUrl: true, primaryColor: true, plan: true },
+    });
+
+    if (!tenant) {
+      return sendError(res, 404, "Tenant not found", ErrorCode.NOT_FOUND);
+    }
+
+    res.json({ data: tenant });
+  } catch (error) {
+    console.error("Get tenant error:", error);
+    sendError(res, 500, "Failed to fetch tenant", ErrorCode.INTERNAL_ERROR);
+  }
+});
+
+// ============================================================================
+// PUT /admin/tenant
+// ============================================================================
+
+router.put("/tenant", requireRole(["OWNER"]), async (req: Request, res: Response) => {
+  try {
+    if (!req.tenantId) {
+      return sendError(res, 401, "Tenant ID not found in context", ErrorCode.UNAUTHORIZED);
+    }
+
+    const { logoUrl, primaryColor, name } = req.body;
+
+    if (primaryColor !== undefined && !/^#[0-9A-Fa-f]{6}$/.test(primaryColor)) {
+      return sendError(res, 400, "Invalid primaryColor. Use hex format #RRGGBB", ErrorCode.VALIDATION_ERROR);
+    }
+
+    if (name !== undefined && (typeof name !== "string" || name.length < 1 || name.length > 100)) {
+      return sendError(res, 400, "Tenant name must be 1-100 characters", ErrorCode.VALIDATION_ERROR);
+    }
+
+    const updatedTenant = await prisma.tenant.update({
+      where: { id: req.tenantId },
+      data: {
+        ...(name !== undefined && { name: name.trim() }),
+        ...(logoUrl !== undefined && { logoUrl: logoUrl || null }),
+        ...(primaryColor !== undefined && { primaryColor }),
+      },
+      select: { id: true, name: true, slug: true, logoUrl: true, primaryColor: true, plan: true },
+    });
+
+    res.json({ data: updatedTenant });
+  } catch (error) {
+    console.error("Update tenant error:", error);
+    sendError(res, 500, "Failed to update tenant", ErrorCode.INTERNAL_ERROR);
+  }
+});
 
 export default router;
