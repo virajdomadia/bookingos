@@ -5,6 +5,20 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 interface Service {
   id: string;
@@ -16,8 +30,7 @@ interface Service {
 }
 
 type FormMode = "create" | "edit";
-
-const emptyForm = { name: "", durationMinutes: 30, price: 0 };
+const emptyForm = { name: "", durationMinutes: 30, price: 0, isStaffService: false };
 
 export default function ServicesPage() {
   const router = useRouter();
@@ -65,7 +78,7 @@ export default function ServicesPage() {
   };
 
   const openEdit = (service: Service) => {
-    setForm({ name: service.name, durationMinutes: service.durationMinutes, price: service.price });
+    setForm({ name: service.name, durationMinutes: service.durationMinutes, price: service.price, isStaffService: service.isStaffService });
     setFormMode("edit");
     setEditingId(service.id);
     setShowForm(true);
@@ -82,10 +95,7 @@ export default function ServicesPage() {
 
   const submitForm = async () => {
     const validationError = validateForm();
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
+    if (validationError) { setError(validationError); return; }
     setSaving(true);
     setError("");
     try {
@@ -94,6 +104,7 @@ export default function ServicesPage() {
           name: form.name.trim(),
           durationMinutes: Number(form.durationMinutes),
           price: Number(form.price),
+          isStaffService: form.isStaffService,
         });
         setServices((prev) => [res.data.data, ...prev]);
         setSuccess("Service created.");
@@ -139,12 +150,14 @@ export default function ServicesPage() {
 
   if (isLoading || loading) {
     return (
-      <div style={s.container}>
-        <div style={s.header}>
-          <Link href="/admin" style={s.backLink}>← Dashboard</Link>
-          <h1 style={s.title}>Services</h1>
+      <div className="min-h-screen bg-gray-50">
+        <header className="bg-white border-b border-border px-6 py-4 flex items-center gap-4">
+          <Link href="/admin" className="text-sm text-primary hover:underline">← Dashboard</Link>
+          <h1 className="text-xl font-bold text-gray-900">Services</h1>
+        </header>
+        <div className="flex items-center justify-center pt-16 text-muted-foreground">
+          Loading services...
         </div>
-        <div style={{ textAlign: "center", paddingTop: "4rem", color: "#6b7280" }}>Loading services...</div>
       </div>
     );
   }
@@ -155,166 +168,204 @@ export default function ServicesPage() {
   const inactiveServices = services.filter((s) => !s.isActive);
 
   return (
-    <div style={s.container}>
-      <div style={s.header}>
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-          <Link href="/admin" style={s.backLink}>← Dashboard</Link>
-          <h1 style={s.title}>Services</h1>
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white border-b border-border px-6 py-4 flex justify-between items-center">
+        <div className="flex items-center gap-4">
+          <Link href="/admin" className="text-sm text-primary hover:underline">← Dashboard</Link>
+          <h1 className="text-xl font-bold text-gray-900">Services</h1>
         </div>
-        <button onClick={openCreate} style={s.primaryBtn}>+ New Service</button>
-      </div>
+        <Button onClick={openCreate}>+ New Service</Button>
+      </header>
 
-      <div style={s.content}>
-        {error && <div style={s.errorAlert}>{error}</div>}
-        {success && <div style={s.successAlert}>{success}</div>}
+      <main className="max-w-4xl mx-auto px-4 py-6 space-y-4">
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {success && (
+          <Alert className="border-green-200 bg-green-50 text-green-800">
+            <AlertDescription>{success}</AlertDescription>
+          </Alert>
+        )}
 
-        {/* Create/Edit Form */}
+        {/* Create / Edit Form */}
         {showForm && (
-          <div style={s.card}>
-            <h2 style={s.cardTitle}>{formMode === "create" ? "New Service" : "Edit Service"}</h2>
-            <div style={s.formGrid}>
-              <div style={s.fieldGroup}>
-                <label style={s.label}>Service Name *</label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="e.g. Haircut, Consultation"
-                  style={s.input}
-                  autoFocus
-                />
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">
+                {formMode === "create" ? "New Service" : "Edit Service"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="space-y-1.5 sm:col-span-1">
+                  <Label>Service Name *</Label>
+                  <Input
+                    type="text"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    placeholder="e.g. Haircut, Consultation"
+                    autoFocus
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Duration (minutes) *</Label>
+                  <Input
+                    type="number"
+                    value={form.durationMinutes}
+                    onChange={(e) => setForm({ ...form, durationMinutes: Number(e.target.value) })}
+                    min={5}
+                    max={480}
+                    step={5}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Price (₹)</Label>
+                  <Input
+                    type="number"
+                    value={form.price}
+                    onChange={(e) => setForm({ ...form, price: Number(e.target.value) })}
+                    min={0}
+                    step={0.01}
+                  />
+                </div>
               </div>
-              <div style={s.fieldGroup}>
-                <label style={s.label}>Duration (minutes) *</label>
+
+              <label className="flex items-center gap-2 cursor-pointer">
                 <input
-                  type="number"
-                  value={form.durationMinutes}
-                  onChange={(e) => setForm({ ...form, durationMinutes: Number(e.target.value) })}
-                  min={5}
-                  max={480}
-                  step={5}
-                  style={s.input}
+                  type="checkbox"
+                  checked={form.isStaffService}
+                  onChange={(e) => setForm({ ...form, isStaffService: e.target.checked })}
+                  className="w-4 h-4 rounded border-gray-300"
                 />
+                <span className="text-sm text-gray-700">
+                  Staff service (assigned to a specific staff member)
+                </span>
+              </label>
+
+              <div className="flex gap-2 pt-1">
+                <Button onClick={submitForm} disabled={saving}>
+                  {saving ? "Saving..." : formMode === "create" ? "Create Service" : "Save Changes"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => { setShowForm(false); setError(""); }}
+                >
+                  Cancel
+                </Button>
               </div>
-              <div style={s.fieldGroup}>
-                <label style={s.label}>Price (₹)</label>
-                <input
-                  type="number"
-                  value={form.price}
-                  onChange={(e) => setForm({ ...form, price: Number(e.target.value) })}
-                  min={0}
-                  step={0.01}
-                  style={s.input}
-                />
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
-              <button onClick={submitForm} disabled={saving} style={{ ...s.primaryBtn, opacity: saving ? 0.6 : 1 }}>
-                {saving ? "Saving..." : formMode === "create" ? "Create Service" : "Save Changes"}
-              </button>
-              <button onClick={() => { setShowForm(false); setError(""); }} style={s.cancelBtn}>Cancel</button>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Active Services */}
-        <div style={s.card}>
-          <h2 style={s.cardTitle}>Active Services ({activeServices.length})</h2>
-          {activeServices.length === 0 ? (
-            <p style={{ color: "#9ca3af", fontSize: "0.875rem" }}>No active services. Create your first service above.</p>
-          ) : (
-            <div style={s.serviceList}>
-              {activeServices.map((service) => (
-                <div key={service.id} style={s.serviceCard}>
-                  <div style={s.serviceInfo}>
-                    <div style={s.serviceName}>{service.name}</div>
-                    <div style={s.serviceMeta}>
-                      <span style={s.metaBadge}>{service.durationMinutes} min</span>
-                      <span style={s.metaBadge}>₹{service.price.toFixed(0)}</span>
-                      {service.isStaffService && <span style={s.staffBadge}>Staff service</span>}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Active Services ({activeServices.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {activeServices.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No active services. Create your first service above.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {activeServices.map((service) => (
+                  <div
+                    key={service.id}
+                    className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-border"
+                  >
+                    <div className="space-y-1">
+                      <p className="font-semibold text-gray-900 text-sm">{service.name}</p>
+                      <div className="flex gap-1.5 flex-wrap">
+                        <Badge variant="secondary">{service.durationMinutes} min</Badge>
+                        <Badge variant="secondary">₹{service.price.toFixed(0)}</Badge>
+                        {service.isStaffService && (
+                          <Badge className="bg-violet-100 text-violet-700 hover:bg-violet-100 border-0">
+                            Staff service
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => openEdit(service)}>
+                        Edit
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => setConfirmDelete(service.id)}
+                      >
+                        Deactivate
+                      </Button>
                     </div>
                   </div>
-                  <div style={s.serviceActions}>
-                    <button onClick={() => openEdit(service)} style={s.editBtn}>Edit</button>
-                    <button onClick={() => setConfirmDelete(service.id)} style={s.deactivateBtn}>Deactivate</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Inactive Services */}
         {inactiveServices.length > 0 && (
-          <div style={s.card}>
-            <h2 style={{ ...s.cardTitle, color: "#9ca3af" }}>Inactive Services ({inactiveServices.length})</h2>
-            <div style={s.serviceList}>
-              {inactiveServices.map((service) => (
-                <div key={service.id} style={{ ...s.serviceCard, opacity: 0.6 }}>
-                  <div style={s.serviceInfo}>
-                    <div style={{ ...s.serviceName, textDecoration: "line-through" }}>{service.name}</div>
-                    <div style={s.serviceMeta}>
-                      <span style={s.metaBadge}>{service.durationMinutes} min</span>
-                      <span style={s.metaBadge}>₹{service.price.toFixed(0)}</span>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base text-muted-foreground">
+                Inactive Services ({inactiveServices.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {inactiveServices.map((service) => (
+                  <div
+                    key={service.id}
+                    className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-border opacity-60"
+                  >
+                    <div className="space-y-1">
+                      <p className="font-semibold text-gray-900 text-sm line-through">{service.name}</p>
+                      <div className="flex gap-1.5 flex-wrap">
+                        <Badge variant="secondary">{service.durationMinutes} min</Badge>
+                        <Badge variant="secondary">₹{service.price.toFixed(0)}</Badge>
+                      </div>
                     </div>
+                    <Button variant="outline" size="sm" onClick={() => toggleActive(service)}>
+                      Reactivate
+                    </Button>
                   </div>
-                  <div style={s.serviceActions}>
-                    <button onClick={() => toggleActive(service)} style={s.editBtn}>Reactivate</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         )}
-      </div>
+      </main>
 
-      {/* Delete Confirmation Modal */}
-      {confirmDelete && (
-        <div style={s.modalOverlay}>
-          <div style={s.modal}>
-            <h3 style={{ marginTop: 0 }}>Deactivate Service?</h3>
-            <p style={{ color: "#6b7280", fontSize: "0.875rem" }}>
-              This service will be hidden from the public booking page. Existing bookings are not affected.
-              You can reactivate it later.
-            </p>
-            <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
-              <button onClick={() => setConfirmDelete(null)} style={s.cancelBtn}>Cancel</button>
-              <button onClick={() => deleteService(confirmDelete)} style={s.dangerBtn}>Yes, Deactivate</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Deactivate Confirmation Dialog */}
+      <Dialog
+        open={confirmDelete !== null}
+        onOpenChange={(open: boolean) => { if (!open) setConfirmDelete(null); }}
+      >
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Deactivate Service?</DialogTitle>
+            <DialogDescription>
+              This service will be hidden from the public booking page. Existing bookings are not
+              affected. You can reactivate it later.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDelete(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => confirmDelete && deleteService(confirmDelete)}
+            >
+              Yes, Deactivate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-
-const s: Record<string, React.CSSProperties> = {
-  container: { minHeight: "100vh", backgroundColor: "#f3f4f6", fontFamily: "system-ui, -apple-system, sans-serif" },
-  header: { backgroundColor: "white", boxShadow: "0 1px 3px rgba(0,0,0,0.1)", padding: "1rem 1.5rem", display: "flex", justifyContent: "space-between", alignItems: "center" },
-  backLink: { color: "#3b82f6", textDecoration: "none", fontSize: "0.875rem" },
-  title: { fontSize: "1.25rem", fontWeight: "bold", margin: 0 },
-  content: { padding: "1.5rem", maxWidth: "900px", margin: "0 auto" },
-  card: { backgroundColor: "white", padding: "1.5rem", borderRadius: "0.5rem", boxShadow: "0 1px 3px rgba(0,0,0,0.1)", marginBottom: "1rem" },
-  cardTitle: { fontSize: "1rem", fontWeight: "600", marginTop: 0, marginBottom: "1rem", color: "#111827" },
-  formGrid: { display: "flex", gap: "1rem", flexWrap: "wrap" },
-  fieldGroup: { display: "flex", flexDirection: "column", gap: "0.375rem", flex: 1, minWidth: "160px" },
-  label: { fontSize: "0.75rem", fontWeight: "600", color: "#374151", textTransform: "uppercase", letterSpacing: "0.05em" },
-  input: { padding: "0.5rem 0.75rem", border: "1px solid #d1d5db", borderRadius: "0.375rem", fontSize: "0.875rem", color: "#111827", outline: "none", width: "100%", boxSizing: "border-box" },
-  serviceList: { display: "flex", flexDirection: "column", gap: "0.75rem" },
-  serviceCard: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem", backgroundColor: "#f9fafb", borderRadius: "0.375rem", border: "1px solid #e5e7eb" },
-  serviceInfo: { display: "flex", flexDirection: "column", gap: "0.375rem" },
-  serviceName: { fontWeight: "600", color: "#111827", fontSize: "0.9375rem" },
-  serviceMeta: { display: "flex", gap: "0.5rem", flexWrap: "wrap" },
-  metaBadge: { fontSize: "0.75rem", backgroundColor: "#e5e7eb", color: "#374151", padding: "0.125rem 0.5rem", borderRadius: "999px" },
-  staffBadge: { fontSize: "0.75rem", backgroundColor: "#ede9fe", color: "#6d28d9", padding: "0.125rem 0.5rem", borderRadius: "999px" },
-  serviceActions: { display: "flex", gap: "0.5rem" },
-  primaryBtn: { padding: "0.5rem 1.25rem", backgroundColor: "#3b82f6", color: "white", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: "600" },
-  editBtn: { padding: "0.375rem 0.875rem", backgroundColor: "#eff6ff", color: "#3b82f6", border: "1px solid #bfdbfe", borderRadius: "0.375rem", cursor: "pointer", fontSize: "0.8125rem", fontWeight: "500" },
-  deactivateBtn: { padding: "0.375rem 0.875rem", backgroundColor: "#fff7ed", color: "#c2410c", border: "1px solid #fed7aa", borderRadius: "0.375rem", cursor: "pointer", fontSize: "0.8125rem", fontWeight: "500" },
-  cancelBtn: { padding: "0.5rem 1.25rem", backgroundColor: "white", color: "#374151", border: "1px solid #d1d5db", borderRadius: "0.375rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: "500" },
-  dangerBtn: { padding: "0.5rem 1.25rem", backgroundColor: "#ef4444", color: "white", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: "600" },
-  errorAlert: { backgroundColor: "#fee2e2", border: "1px solid #fecaca", color: "#991b1b", padding: "0.875rem 1rem", borderRadius: "0.375rem", marginBottom: "1rem", fontSize: "0.875rem" },
-  successAlert: { backgroundColor: "#dcfce7", border: "1px solid #bbf7d0", color: "#166534", padding: "0.875rem 1rem", borderRadius: "0.375rem", marginBottom: "1rem", fontSize: "0.875rem" },
-  modalOverlay: { position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 },
-  modal: { backgroundColor: "white", borderRadius: "0.5rem", padding: "1.5rem", maxWidth: "400px", width: "90%", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" },
-};

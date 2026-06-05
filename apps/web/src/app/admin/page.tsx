@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 
 interface Tenant {
   name: string;
@@ -12,15 +15,34 @@ interface Tenant {
   primaryColor: string;
 }
 
+interface NavItem {
+  href: string;
+  label: string;
+  icon: string;
+  description: string;
+  comingSoon?: boolean;
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { href: "/admin/schedule", label: "Schedule & Branding", icon: "📋", description: "Working hours, breaks, timezone, logo" },
+  { href: "/admin/services", label: "Services", icon: "⚙️", description: "Manage your bookable services" },
+  { href: "/admin/bookings", label: "Bookings", icon: "📅", description: "View and manage appointments", comingSoon: true },
+  { href: "/admin/staff", label: "Staff", icon: "👥", description: "Manage team members and roles", comingSoon: true },
+];
+
+const KPI_ITEMS = [
+  { label: "Today's Bookings", value: "—" },
+  { label: "This Week", value: "—" },
+  { label: "Pending", value: "—" },
+];
+
 export default function AdminDashboard() {
   const router = useRouter();
   const { accessToken, user, isLoading, logout } = useAuth();
   const [tenant, setTenant] = useState<Tenant | null>(null);
 
   useEffect(() => {
-    if (!isLoading && !accessToken) {
-      router.push("/auth");
-    }
+    if (!isLoading && !accessToken) router.push("/auth");
   }, [accessToken, isLoading, router]);
 
   useEffect(() => {
@@ -39,99 +61,81 @@ export default function AdminDashboard() {
 
   if (isLoading) {
     return (
-      <div style={s.container}>
-        <div style={{ textAlign: "center", paddingTop: "6rem", color: "#6b7280" }}>Loading...</div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
       </div>
     );
   }
 
   if (!accessToken || !user) return null;
 
-  const navItems = [
-    { href: "/admin/schedule", label: "Schedule & Branding", icon: "📋", description: "Working hours, breaks, timezone, logo" },
-    { href: "/admin/services", label: "Services", icon: "⚙️", description: "Manage your bookable services" },
-    { href: "/admin/bookings", label: "Bookings", icon: "📅", description: "View and manage appointments", comingSoon: true },
-    { href: "/admin/staff", label: "Staff", icon: "👥", description: "Manage team members and roles", comingSoon: true },
-  ];
-
   return (
-    <div style={s.container}>
-      <div style={s.header}>
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white border-b border-border px-6 py-4 flex justify-between items-center">
         <div>
-          <h1 style={s.title}>{tenant?.name || "Admin Dashboard"}</h1>
-          {tenant && <span style={s.slugBadge}>/book/{tenant.slug}</span>}
+          <h1 className="text-xl font-bold text-gray-900">{tenant?.name || "Admin Dashboard"}</h1>
+          {tenant && (
+            <p className="text-xs text-muted-foreground mt-0.5">/book/{tenant.slug}</p>
+          )}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-          <span style={s.emailBadge}>{user.email}</span>
-          <button style={s.logoutBtn} onClick={handleLogout}>Logout</button>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-muted-foreground hidden sm:block">{user.email}</span>
+          <Button variant="destructive" size="sm" onClick={handleLogout}>
+            Logout
+          </Button>
         </div>
-      </div>
+      </header>
 
-      <div style={s.content}>
-        {/* KPI placeholder */}
-        <div style={s.kpiRow}>
-          {[
-            { label: "Today's Bookings", value: "—" },
-            { label: "This Week", value: "—" },
-            { label: "Pending", value: "—" },
-          ].map(({ label, value }) => (
-            <div key={label} style={s.kpiCard}>
-              <div style={s.kpiValue}>{value}</div>
-              <div style={s.kpiLabel}>{label}</div>
-            </div>
+      <main className="max-w-4xl mx-auto px-4 py-6 space-y-5">
+        {/* KPI strip */}
+        <div className="grid grid-cols-3 gap-4">
+          {KPI_ITEMS.map(({ label, value }) => (
+            <Card key={label}>
+              <CardContent className="pt-5 pb-4 text-center">
+                <div className="text-3xl font-bold text-gray-900">{value}</div>
+                <div className="text-xs text-muted-foreground mt-1 uppercase tracking-wide">{label}</div>
+              </CardContent>
+            </Card>
           ))}
         </div>
 
-        {/* Nav Grid */}
-        <div style={s.navGrid}>
-          {navItems.map(({ href, label, icon, description, comingSoon }) =>
+        {/* Navigation grid */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {NAV_ITEMS.map(({ href, label, icon, description, comingSoon }) =>
             comingSoon ? (
-              <div key={href} style={{ ...s.navCard, ...s.navCardDisabled }}>
-                <div style={s.navIcon}>{icon}</div>
-                <div style={s.navLabel}>{label}</div>
-                <div style={s.navDesc}>{description}</div>
-                <span style={s.comingSoonBadge}>Coming soon</span>
+              <div
+                key={href}
+                className="bg-white rounded-lg border border-border p-5 opacity-50 cursor-default flex flex-col gap-1.5"
+              >
+                <span className="text-2xl">{icon}</span>
+                <p className="font-semibold text-gray-900 text-sm">{label}</p>
+                <p className="text-xs text-muted-foreground leading-snug">{description}</p>
+                <Badge variant="secondary" className="w-fit mt-1 text-xs">Coming soon</Badge>
               </div>
             ) : (
-              <Link key={href} href={href} style={{ ...s.navCard, textDecoration: "none" }}>
-                <div style={s.navIcon}>{icon}</div>
-                <div style={s.navLabel}>{label}</div>
-                <div style={s.navDesc}>{description}</div>
+              <Link
+                key={href}
+                href={href}
+                className="bg-white rounded-lg border border-border p-5 flex flex-col gap-1.5 no-underline hover:shadow-sm transition-shadow"
+              >
+                <span className="text-2xl">{icon}</span>
+                <p className="font-semibold text-gray-900 text-sm">{label}</p>
+                <p className="text-xs text-muted-foreground leading-snug">{description}</p>
               </Link>
             )
           )}
         </div>
 
-        {/* Role info */}
-        <div style={s.roleCard}>
-          <span style={s.roleLabel}>Signed in as</span>
-          <span style={s.roleBadge}>{user.role}</span>
-        </div>
-      </div>
+        {/* Role pill */}
+        <Card>
+          <CardContent className="py-3 flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Signed in as</span>
+            <Badge className="bg-violet-100 text-violet-700 hover:bg-violet-100 border-0">
+              {user.role}
+            </Badge>
+          </CardContent>
+        </Card>
+      </main>
     </div>
   );
 }
-
-const s: Record<string, React.CSSProperties> = {
-  container: { minHeight: "100vh", backgroundColor: "#f3f4f6", fontFamily: "system-ui, -apple-system, sans-serif" },
-  header: { backgroundColor: "white", boxShadow: "0 1px 3px rgba(0,0,0,0.1)", padding: "1rem 1.5rem", display: "flex", justifyContent: "space-between", alignItems: "center" },
-  title: { fontSize: "1.25rem", fontWeight: "bold", margin: 0 },
-  slugBadge: { fontSize: "0.75rem", color: "#6b7280", marginTop: "0.25rem", display: "block" },
-  emailBadge: { fontSize: "0.8125rem", color: "#6b7280" },
-  logoutBtn: { padding: "0.375rem 0.875rem", backgroundColor: "#fee2e2", color: "#dc2626", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: "500" },
-  content: { padding: "1.5rem", maxWidth: "900px", margin: "0 auto" },
-  kpiRow: { display: "flex", gap: "1rem", marginBottom: "1.5rem", flexWrap: "wrap" },
-  kpiCard: { flex: 1, minWidth: "120px", backgroundColor: "white", padding: "1.25rem", borderRadius: "0.5rem", boxShadow: "0 1px 3px rgba(0,0,0,0.1)", textAlign: "center" },
-  kpiValue: { fontSize: "1.875rem", fontWeight: "bold", color: "#111827" },
-  kpiLabel: { fontSize: "0.75rem", color: "#6b7280", marginTop: "0.25rem", textTransform: "uppercase", letterSpacing: "0.05em" },
-  navGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "1rem" },
-  navCard: { backgroundColor: "white", padding: "1.5rem", borderRadius: "0.5rem", boxShadow: "0 1px 3px rgba(0,0,0,0.1)", cursor: "pointer", transition: "box-shadow 0.15s", color: "inherit", display: "flex", flexDirection: "column", gap: "0.375rem" },
-  navCardDisabled: { opacity: 0.5, cursor: "default" },
-  navIcon: { fontSize: "1.5rem" },
-  navLabel: { fontWeight: "600", fontSize: "0.9375rem", color: "#111827" },
-  navDesc: { fontSize: "0.8125rem", color: "#6b7280", lineHeight: 1.4 },
-  comingSoonBadge: { marginTop: "0.5rem", fontSize: "0.6875rem", backgroundColor: "#f3f4f6", color: "#9ca3af", padding: "0.125rem 0.5rem", borderRadius: "999px", alignSelf: "flex-start", border: "1px solid #e5e7eb" },
-  roleCard: { backgroundColor: "white", padding: "0.875rem 1.25rem", borderRadius: "0.5rem", boxShadow: "0 1px 3px rgba(0,0,0,0.1)", display: "flex", alignItems: "center", gap: "0.5rem" },
-  roleLabel: { fontSize: "0.8125rem", color: "#6b7280" },
-  roleBadge: { fontSize: "0.75rem", backgroundColor: "#ede9fe", color: "#6d28d9", padding: "0.125rem 0.625rem", borderRadius: "999px", fontWeight: "600" },
-};

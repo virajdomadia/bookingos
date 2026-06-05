@@ -5,6 +5,13 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 const DAYS = [
   { key: "mon", label: "Monday" },
@@ -17,25 +24,14 @@ const DAYS = [
 ];
 
 const SLOT_INTERVALS = [15, 30, 45, 60, 90, 120];
-
+const BUFFER_TIMES = [0, 5, 10, 15, 30];
 const TIMEZONES = [
-  "Asia/Kolkata",
-  "UTC",
-  "America/New_York",
-  "America/Chicago",
-  "America/Los_Angeles",
-  "Europe/London",
-  "Europe/Paris",
-  "Asia/Dubai",
-  "Asia/Singapore",
-  "Australia/Sydney",
+  "Asia/Kolkata", "UTC", "America/New_York", "America/Chicago",
+  "America/Los_Angeles", "Europe/London", "Europe/Paris",
+  "Asia/Dubai", "Asia/Singapore", "Australia/Sydney",
 ];
 
-interface BreakTime {
-  start: string;
-  end: string;
-}
-
+interface BreakTime { start: string; end: string }
 interface Schedule {
   timezone: string;
   workingDays: Record<string, boolean>;
@@ -45,13 +41,7 @@ interface Schedule {
   breakTimes: BreakTime[];
   bufferTime: number;
 }
-
-interface Tenant {
-  name: string;
-  slug: string;
-  logoUrl: string | null;
-  primaryColor: string;
-}
+interface Tenant { name: string; slug: string; logoUrl: string | null; primaryColor: string }
 
 export default function SchedulePage() {
   const router = useRouter();
@@ -65,15 +55,11 @@ export default function SchedulePage() {
   const [error, setError] = useState("");
   const [scheduleSuccess, setScheduleSuccess] = useState("");
   const [brandingSuccess, setBrandingSuccess] = useState("");
-
-  // Branding state
   const [logoUrl, setLogoUrl] = useState("");
   const [primaryColor, setPrimaryColor] = useState("#4F46E5");
 
   useEffect(() => {
-    if (!isLoading && !accessToken) {
-      router.push("/auth");
-    }
+    if (!isLoading && !accessToken) router.push("/auth");
   }, [accessToken, isLoading, router]);
 
   useEffect(() => {
@@ -112,8 +98,7 @@ export default function SchedulePage() {
   const toggleDay = (key: string) => {
     if (!schedule) return;
     const updated = { ...schedule.workingDays, [key]: !schedule.workingDays[key] };
-    const anyActive = Object.values(updated).some(Boolean);
-    if (!anyActive) {
+    if (!Object.values(updated).some(Boolean)) {
       setError("At least one working day must be active.");
       return;
     }
@@ -123,26 +108,20 @@ export default function SchedulePage() {
 
   const addBreak = () => {
     if (!schedule) return;
-    setSchedule({
-      ...schedule,
-      breakTimes: [...schedule.breakTimes, { start: "12:00", end: "13:00" }],
-    });
+    setSchedule({ ...schedule, breakTimes: [...schedule.breakTimes, { start: "12:00", end: "13:00" }] });
   };
 
   const updateBreak = (index: number, field: "start" | "end", value: string) => {
     if (!schedule) return;
-    const updated = schedule.breakTimes.map((b, i) =>
-      i === index ? { ...b, [field]: value } : b
-    );
-    setSchedule({ ...schedule, breakTimes: updated });
+    setSchedule({
+      ...schedule,
+      breakTimes: schedule.breakTimes.map((b, i) => i === index ? { ...b, [field]: value } : b),
+    });
   };
 
   const removeBreak = (index: number) => {
     if (!schedule) return;
-    setSchedule({
-      ...schedule,
-      breakTimes: schedule.breakTimes.filter((_, i) => i !== index),
-    });
+    setSchedule({ ...schedule, breakTimes: schedule.breakTimes.filter((_, i) => i !== index) });
   };
 
   const validateSchedule = (): string | null => {
@@ -156,16 +135,13 @@ export default function SchedulePage() {
 
   const saveSchedule = async () => {
     const validationError = validateSchedule();
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
+    if (validationError) { setError(validationError); return; }
     setSaving(true);
     setError("");
     setScheduleSuccess("");
     try {
       await api.put("/admin/schedule", schedule);
-      setScheduleSuccess("Schedule saved successfully!");
+      setScheduleSuccess("Schedule saved!");
       setTimeout(() => setScheduleSuccess(""), 3000);
     } catch {
       setError("Failed to save schedule. Please try again.");
@@ -184,7 +160,7 @@ export default function SchedulePage() {
     setBrandingSuccess("");
     try {
       await api.put("/admin/tenant", { logoUrl: logoUrl || null, primaryColor });
-      setBrandingSuccess("Branding saved successfully!");
+      setBrandingSuccess("Branding saved!");
       setTimeout(() => setBrandingSuccess(""), 3000);
     } catch {
       setError("Failed to save branding. Please try again.");
@@ -193,14 +169,16 @@ export default function SchedulePage() {
     }
   };
 
+  const nativeSelectClass = "w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring";
+
   if (isLoading || loading) {
     return (
-      <div style={s.container}>
-        <div style={s.header}>
-          <Link href="/admin" style={s.backLink}>← Dashboard</Link>
-          <h1 style={s.title}>Schedule & Branding</h1>
-        </div>
-        <div style={{ ...s.content, textAlign: "center", paddingTop: "4rem", color: "#6b7280" }}>
+      <div className="min-h-screen bg-gray-50">
+        <header className="bg-white border-b border-border px-6 py-4 flex items-center gap-4">
+          <Link href="/admin" className="text-sm text-primary hover:underline">← Dashboard</Link>
+          <h1 className="text-xl font-bold text-gray-900">Schedule & Branding</h1>
+        </header>
+        <div className="flex items-center justify-center pt-16 text-muted-foreground">
           Loading settings...
         </div>
       </div>
@@ -210,224 +188,232 @@ export default function SchedulePage() {
   if (!accessToken) return null;
 
   return (
-    <div style={s.container}>
-      <div style={s.header}>
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-          <Link href="/admin" style={s.backLink}>← Dashboard</Link>
-          <h1 style={s.title}>Schedule & Branding</h1>
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white border-b border-border px-6 py-4 flex justify-between items-center">
+        <div className="flex items-center gap-4">
+          <Link href="/admin" className="text-sm text-primary hover:underline">← Dashboard</Link>
+          <h1 className="text-xl font-bold text-gray-900">Schedule & Branding</h1>
         </div>
         {tenant && (
-          <span style={s.slugBadge}>{tenant.slug}</span>
+          <Badge variant="secondary">{tenant.slug}</Badge>
         )}
-      </div>
+      </header>
 
-      <div style={s.content}>
-        {error && <div style={s.errorAlert}>{error}</div>}
+      <main className="max-w-4xl mx-auto px-4 py-6 space-y-4">
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
         {schedule && (
           <>
             {/* Working Days */}
-            <div style={s.card}>
-              <h2 style={s.cardTitle}>Working Days</h2>
-              <div style={s.daysGrid}>
-                {DAYS.map(({ key, label }) => (
-                  <button
-                    key={key}
-                    onClick={() => toggleDay(key)}
-                    style={{
-                      ...s.dayBtn,
-                      ...(schedule.workingDays[key] ? s.dayBtnActive : s.dayBtnInactive),
-                    }}
-                  >
-                    {label.slice(0, 3)}
-                    <span style={s.dayFull}>{label.slice(3)}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Working Days</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2">
+                  {DAYS.map(({ key, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => toggleDay(key)}
+                      className={cn(
+                        "px-4 py-2 rounded-md text-sm font-medium transition-colors",
+                        schedule.workingDays[key]
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                      )}
+                    >
+                      {label.slice(0, 3)}
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Working Hours */}
-            <div style={s.card}>
-              <h2 style={s.cardTitle}>Working Hours</h2>
-              <div style={s.row}>
-                <div style={s.fieldGroup}>
-                  <label style={s.label}>Start Time</label>
-                  <input
-                    type="time"
-                    value={schedule.workStart}
-                    onChange={(e) => setSchedule({ ...schedule, workStart: e.target.value })}
-                    style={s.input}
-                  />
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Working Hours</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  <div className="space-y-1.5">
+                    <Label>Start Time</Label>
+                    <Input
+                      type="time"
+                      value={schedule.workStart}
+                      onChange={(e) => setSchedule({ ...schedule, workStart: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>End Time</Label>
+                    <Input
+                      type="time"
+                      value={schedule.workEnd}
+                      onChange={(e) => setSchedule({ ...schedule, workEnd: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Slot Interval</Label>
+                    <select
+                      value={schedule.slotInterval}
+                      onChange={(e) => setSchedule({ ...schedule, slotInterval: Number(e.target.value) })}
+                      className={nativeSelectClass}
+                    >
+                      {SLOT_INTERVALS.map((v) => (
+                        <option key={v} value={v}>{v} min</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Buffer Between Bookings</Label>
+                    <select
+                      value={schedule.bufferTime}
+                      onChange={(e) => setSchedule({ ...schedule, bufferTime: Number(e.target.value) })}
+                      className={nativeSelectClass}
+                    >
+                      {BUFFER_TIMES.map((v) => (
+                        <option key={v} value={v}>{v === 0 ? "None" : `${v} min`}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-                <div style={s.fieldGroup}>
-                  <label style={s.label}>End Time</label>
-                  <input
-                    type="time"
-                    value={schedule.workEnd}
-                    onChange={(e) => setSchedule({ ...schedule, workEnd: e.target.value })}
-                    style={s.input}
-                  />
-                </div>
-                <div style={s.fieldGroup}>
-                  <label style={s.label}>Slot Interval</label>
-                  <select
-                    value={schedule.slotInterval}
-                    onChange={(e) => setSchedule({ ...schedule, slotInterval: Number(e.target.value) })}
-                    style={s.input}
-                  >
-                    {SLOT_INTERVALS.map((v) => (
-                      <option key={v} value={v}>{v} min</option>
-                    ))}
-                  </select>
-                </div>
-                <div style={s.fieldGroup}>
-                  <label style={s.label}>Buffer Between Bookings</label>
-                  <select
-                    value={schedule.bufferTime}
-                    onChange={(e) => setSchedule({ ...schedule, bufferTime: Number(e.target.value) })}
-                    style={s.input}
-                  >
-                    {[0, 5, 10, 15, 30].map((v) => (
-                      <option key={v} value={v}>{v === 0 ? "None" : `${v} min`}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
 
             {/* Timezone */}
-            <div style={s.card}>
-              <h2 style={s.cardTitle}>Timezone</h2>
-              <select
-                value={schedule.timezone}
-                onChange={(e) => setSchedule({ ...schedule, timezone: e.target.value })}
-                style={{ ...s.input, maxWidth: "320px" }}
-              >
-                {TIMEZONES.map((tz) => (
-                  <option key={tz} value={tz}>{tz}</option>
-                ))}
-              </select>
-            </div>
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Timezone</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <select
+                  value={schedule.timezone}
+                  onChange={(e) => setSchedule({ ...schedule, timezone: e.target.value })}
+                  className={cn(nativeSelectClass, "max-w-xs")}
+                >
+                  {TIMEZONES.map((tz) => (
+                    <option key={tz} value={tz}>{tz}</option>
+                  ))}
+                </select>
+              </CardContent>
+            </Card>
 
             {/* Break Times */}
-            <div style={s.card}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-                <h2 style={{ ...s.cardTitle, marginBottom: 0 }}>Break Times</h2>
-                <button onClick={addBreak} style={s.addBtn}>+ Add Break</button>
-              </div>
-              {schedule.breakTimes.length === 0 && (
-                <p style={{ color: "#9ca3af", fontSize: "0.875rem" }}>No breaks configured. Bookings run continuously through working hours.</p>
-              )}
-              {schedule.breakTimes.map((b, i) => (
-                <div key={i} style={s.breakRow}>
-                  <div style={s.fieldGroup}>
-                    <label style={s.label}>Start</label>
-                    <input
-                      type="time"
-                      value={b.start}
-                      onChange={(e) => updateBreak(i, "start", e.target.value)}
-                      style={s.input}
-                    />
-                  </div>
-                  <div style={s.fieldGroup}>
-                    <label style={s.label}>End</label>
-                    <input
-                      type="time"
-                      value={b.end}
-                      onChange={(e) => updateBreak(i, "end", e.target.value)}
-                      style={s.input}
-                    />
-                  </div>
-                  <button onClick={() => removeBreak(i)} style={s.removeBtn} title="Remove break">×</button>
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex justify-between items-center">
+                  <CardTitle className="text-base">Break Times</CardTitle>
+                  <Button variant="outline" size="sm" onClick={addBreak}>+ Add Break</Button>
                 </div>
-              ))}
-            </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {schedule.breakTimes.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No breaks configured. Bookings run continuously through working hours.
+                  </p>
+                ) : (
+                  schedule.breakTimes.map((b, i) => (
+                    <div key={i} className="flex items-end gap-3">
+                      <div className="space-y-1.5 flex-1">
+                        <Label>Start</Label>
+                        <Input
+                          type="time"
+                          value={b.start}
+                          onChange={(e) => updateBreak(i, "start", e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5 flex-1">
+                        <Label>End</Label>
+                        <Input
+                          type="time"
+                          value={b.end}
+                          onChange={(e) => updateBreak(i, "end", e.target.value)}
+                        />
+                      </div>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => removeBreak(i)}
+                        className="mb-0.5"
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
-              <button onClick={saveSchedule} disabled={saving} style={{ ...s.saveBtn, opacity: saving ? 0.6 : 1 }}>
+            <div className="flex items-center gap-3">
+              <Button onClick={saveSchedule} disabled={saving}>
                 {saving ? "Saving..." : "Save Schedule"}
-              </button>
-              {scheduleSuccess && <span style={s.inlineSuccess}>{scheduleSuccess}</span>}
+              </Button>
+              {scheduleSuccess && (
+                <span className="text-sm text-green-600 font-medium">{scheduleSuccess}</span>
+              )}
             </div>
           </>
         )}
 
         {/* Branding */}
-        <div style={{ ...s.card, marginTop: "2rem" }}>
-          <h2 style={s.cardTitle}>Branding</h2>
-          <div style={s.row}>
-            <div style={{ ...s.fieldGroup, flex: 2 }}>
-              <label style={s.label}>Logo URL</label>
-              <input
-                type="url"
-                value={logoUrl}
-                onChange={(e) => setLogoUrl(e.target.value)}
-                placeholder="https://example.com/logo.png"
-                style={s.input}
-              />
-              {logoUrl && (
-                <img
-                  src={logoUrl}
-                  alt="Logo preview"
-                  style={{ marginTop: "0.5rem", maxHeight: "60px", borderRadius: "4px" }}
-                  onError={(e) => (e.currentTarget.style.display = "none")}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Branding</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Logo URL</Label>
+                <Input
+                  type="url"
+                  value={logoUrl}
+                  onChange={(e) => setLogoUrl(e.target.value)}
+                  placeholder="https://example.com/logo.png"
                 />
-              )}
-            </div>
-            <div style={s.fieldGroup}>
-              <label style={s.label}>Primary Color</label>
-              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                <input
-                  type="color"
-                  value={primaryColor}
-                  onChange={(e) => setPrimaryColor(e.target.value)}
-                  style={{ width: "44px", height: "40px", padding: "2px", border: "1px solid #d1d5db", borderRadius: "6px", cursor: "pointer" }}
-                />
-                <input
-                  type="text"
-                  value={primaryColor}
-                  onChange={(e) => setPrimaryColor(e.target.value)}
-                  placeholder="#4F46E5"
-                  maxLength={7}
-                  style={{ ...s.input, width: "110px" }}
-                />
+                {logoUrl && (
+                  <img
+                    src={logoUrl}
+                    alt="Logo preview"
+                    className="mt-2 max-h-14 rounded"
+                    onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
+                  />
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label>Primary Color</Label>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="color"
+                    value={primaryColor}
+                    onChange={(e) => setPrimaryColor(e.target.value)}
+                    className="w-10 h-9 rounded border border-input cursor-pointer p-0.5"
+                  />
+                  <Input
+                    type="text"
+                    value={primaryColor}
+                    onChange={(e) => setPrimaryColor(e.target.value)}
+                    placeholder="#4F46E5"
+                    maxLength={7}
+                    className="w-28"
+                  />
+                </div>
               </div>
             </div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginTop: "1rem", flexWrap: "wrap" }}>
-            <button onClick={saveBranding} disabled={savingBranding} style={{ ...s.saveBtn, opacity: savingBranding ? 0.6 : 1 }}>
-              {savingBranding ? "Saving..." : "Save Branding"}
-            </button>
-            {brandingSuccess && <span style={s.inlineSuccess}>{brandingSuccess}</span>}
-          </div>
-        </div>
-      </div>
+            <div className="flex items-center gap-3">
+              <Button onClick={saveBranding} disabled={savingBranding}>
+                {savingBranding ? "Saving..." : "Save Branding"}
+              </Button>
+              {brandingSuccess && (
+                <span className="text-sm text-green-600 font-medium">{brandingSuccess}</span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </main>
     </div>
   );
 }
-
-const s: Record<string, React.CSSProperties> = {
-  container: { minHeight: "100vh", backgroundColor: "#f3f4f6", fontFamily: "system-ui, -apple-system, sans-serif" },
-  header: { backgroundColor: "white", boxShadow: "0 1px 3px rgba(0,0,0,0.1)", padding: "1rem 1.5rem", display: "flex", justifyContent: "space-between", alignItems: "center" },
-  backLink: { color: "#3b82f6", textDecoration: "none", fontSize: "0.875rem" },
-  title: { fontSize: "1.25rem", fontWeight: "bold", margin: 0 },
-  slugBadge: { backgroundColor: "#f3f4f6", color: "#6b7280", fontSize: "0.75rem", padding: "0.25rem 0.75rem", borderRadius: "999px", border: "1px solid #e5e7eb" },
-  content: { padding: "1.5rem", maxWidth: "900px", margin: "0 auto" },
-  card: { backgroundColor: "white", padding: "1.5rem", borderRadius: "0.5rem", boxShadow: "0 1px 3px rgba(0,0,0,0.1)", marginBottom: "1rem" },
-  cardTitle: { fontSize: "1rem", fontWeight: "600", marginTop: 0, marginBottom: "1rem", color: "#111827" },
-  daysGrid: { display: "flex", gap: "0.5rem", flexWrap: "wrap" },
-  dayBtn: { padding: "0.5rem 1rem", borderRadius: "0.375rem", border: "none", cursor: "pointer", fontWeight: "500", fontSize: "0.875rem", transition: "background 0.15s" },
-  dayFull: { display: "none" },
-  dayBtnActive: { backgroundColor: "#3b82f6", color: "white" },
-  dayBtnInactive: { backgroundColor: "#f3f4f6", color: "#6b7280" },
-  row: { display: "flex", gap: "1rem", flexWrap: "wrap" },
-  fieldGroup: { display: "flex", flexDirection: "column", gap: "0.375rem", flex: 1, minWidth: "140px" },
-  label: { fontSize: "0.75rem", fontWeight: "600", color: "#374151", textTransform: "uppercase", letterSpacing: "0.05em" },
-  input: { padding: "0.5rem 0.75rem", border: "1px solid #d1d5db", borderRadius: "0.375rem", fontSize: "0.875rem", color: "#111827", outline: "none", width: "100%", boxSizing: "border-box" },
-  addBtn: { padding: "0.375rem 0.875rem", backgroundColor: "#eff6ff", color: "#3b82f6", border: "1px solid #bfdbfe", borderRadius: "0.375rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: "500" },
-  breakRow: { display: "flex", gap: "1rem", alignItems: "flex-end", marginBottom: "0.75rem" },
-  removeBtn: { padding: "0.5rem 0.75rem", backgroundColor: "#fee2e2", color: "#dc2626", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontSize: "1.25rem", lineHeight: 1 },
-  saveBtn: { padding: "0.75rem 2rem", backgroundColor: "#3b82f6", color: "white", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: "600" },
-  errorAlert: { backgroundColor: "#fee2e2", border: "1px solid #fecaca", color: "#991b1b", padding: "0.875rem 1rem", borderRadius: "0.375rem", marginBottom: "1rem", fontSize: "0.875rem" },
-  inlineSuccess: { color: "#166534", fontSize: "0.875rem", fontWeight: "500" },
-};
