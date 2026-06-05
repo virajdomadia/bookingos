@@ -1,0 +1,24 @@
+{
+  "name": "booking-os-v13",
+  "version": "1.0.0",
+  "description": "Multitenant white-label appointment booking platform",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"pnpm -r --filter './apps/**' dev\"",
+    "dev:web": "pnpm --filter web dev",
+    "dev:api": "pnpm --filter api dev",
+    "build": "pnpm -r --filter './apps/**' build",
+    "db:migrate": "pnpm --filter db migrate dev",
+    "db:studio": "pnpm --filter db studio",
+    "db:seed": "pnpm --filter db seed",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "type-check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "typescript": "^5.3.3"
+  }
+}
+

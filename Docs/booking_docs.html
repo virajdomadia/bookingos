@@ -1,0 +1,1992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Booking System — Project Hub (Web Only)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,400;12..96,500;12..96,700;12..96,800&family=Azeret+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════ TOKENS */
+:root{
+  --navy:  #0d1117;
+  --navy2: #161b22;
+  --navy3: #1c2330;
+  --navy4: #242d3a;
+  --cream: #f5f0e8;
+  --cream2:#ede8dc;
+  --amber: #e8a020;
+  --amber2:#c87c10;
+  --amber-dim:rgba(232,160,32,.12);
+  --green: #3fb950;
+  --green-dim:rgba(63,185,80,.1);
+  --red:   #f85149;
+  --blue:  #58a6ff;
+  --blue-dim:rgba(88,166,255,.1);
+  --text:  #e6edf3;
+  --text2: #8b949e;
+  --text3: #484f58;
+  --border:#30363d;
+  --border2:#21262d;
+  --ff:    'Bricolage Grotesque',sans-serif;
+  --fm:    'Azeret Mono',monospace;
+  --r:     10px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:var(--ff);
+  background:var(--navy);
+  color:var(--text);
+  min-height:100vh;
+  overflow-x:hidden;
+}
+
+/* graph-paper bg */
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:
+    linear-gradient(rgba(88,166,255,.04) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(88,166,255,.04) 1px,transparent 1px);
+  background-size:32px 32px;
+}
+
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:var(--navy)}
+::-webkit-scrollbar-thumb{background:var(--navy4);border-radius:2px}
+
+/* ═══════════════════════════════════ SHELL */
+#shell{position:relative;z-index:1;display:flex;min-height:100vh}
+
+/* ═══════════════════════════════════ SIDEBAR */
+#sidebar{
+  width:260px;flex-shrink:0;
+  background:var(--navy2);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  position:sticky;top:0;height:100vh;
+  overflow-y:auto;
+}
+.sb-head{
+  padding:28px 20px 20px;
+  border-bottom:1px solid var(--border);
+}
+.sb-logo{
+  display:flex;align-items:center;gap:10px;margin-bottom:14px;
+}
+.sb-logo-mark{
+  width:32px;height:32px;border-radius:8px;
+  background:linear-gradient(135deg,var(--amber),var(--amber2));
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--fm);font-size:14px;font-weight:500;color:var(--navy);
+}
+.sb-logo-text{font-size:15px;font-weight:700;letter-spacing:-.02em}
+.sb-version{
+  font-family:var(--fm);font-size:10px;color:var(--text3);
+  background:var(--navy3);border:1px solid var(--border);
+  padding:3px 8px;border-radius:4px;letter-spacing:.04em;
+  display:inline-flex;align-items:center;gap:5px;
+}
+.sb-version::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--green)}
+.sb-score{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px;
+}
+.score-card{
+  background:var(--navy3);border:1px solid var(--border);
+  border-radius:6px;padding:10px;text-align:center;
+}
+.score-num{font-family:var(--fm);font-size:20px;font-weight:500;color:var(--amber);line-height:1}
+.score-lbl{font-size:9px;color:var(--text3);margin-top:3px;letter-spacing:.04em}
+
+.sb-nav{flex:1;padding:12px 0}
+.sb-group-lbl{
+  font-family:var(--fm);font-size:9px;color:var(--text3);
+  letter-spacing:.12em;text-transform:uppercase;
+  padding:10px 20px 4px;
+}
+.sb-btn{
+  display:flex;align-items:center;gap:10px;
+  width:100%;padding:9px 20px;
+  background:none;border:none;
+  font-family:var(--ff);font-size:13px;font-weight:400;
+  color:var(--text2);cursor:pointer;
+  border-left:2px solid transparent;
+  transition:all .15s;text-align:left;
+}
+.sb-btn:hover{color:var(--text);background:rgba(255,255,255,.03)}
+.sb-btn.active{
+  color:var(--amber);background:var(--amber-dim);
+  border-left-color:var(--amber);font-weight:500;
+}
+.sb-btn .num{
+  font-family:var(--fm);font-size:10px;color:var(--text3);
+  min-width:20px;
+}
+.sb-btn.active .num{color:var(--amber);opacity:.6}
+.sb-btn .dot-fix{
+  width:5px;height:5px;border-radius:50%;background:var(--green);
+  flex-shrink:0;margin-left:auto;
+}
+.sb-footer{
+  padding:16px 20px;border-top:1px solid var(--border);
+  font-family:var(--fm);font-size:10px;color:var(--text3);
+}
+
+/* ═══════════════════════════════════ MAIN */
+#main{flex:1;overflow-y:auto;overflow-x:hidden}
+
+/* ═══════════════════════════════════ TOPBAR */
+.topbar{
+  position:sticky;top:0;z-index:100;
+  background:rgba(13,17,23,.9);
+  backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);
+  padding:0 32px;
+  display:flex;align-items:center;gap:16px;height:52px;
+}
+.topbar-doc{
+  font-family:var(--fm);font-size:12px;color:var(--text2);
+  flex:1;
+}
+.topbar-doc span{color:var(--amber)}
+.topbar-chip{
+  font-family:var(--fm);font-size:9px;letter-spacing:.08em;
+  padding:3px 10px;border-radius:100px;border:1px solid;
+}
+.chip-amber{border-color:rgba(232,160,32,.3);color:var(--amber);background:var(--amber-dim)}
+.chip-green{border-color:rgba(63,185,80,.3);color:var(--green);background:var(--green-dim)}
+.chip-blue{border-color:rgba(88,166,255,.3);color:var(--blue);background:var(--blue-dim)}
+.topbar-menu-btn{
+  display:none;background:none;border:none;
+  color:var(--text2);font-size:20px;cursor:pointer;padding:4px;
+}
+
+/* ═══════════════════════════════════ PAGE */
+.page{display:none;padding:40px 40px 80px;max-width:920px;animation:fadeIn .3s ease}
+.page.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* ═══════════════════════════════════ TYPOGRAPHY */
+.eyebrow{
+  display:flex;align-items:center;gap:10px;
+  font-family:var(--fm);font-size:10px;color:var(--text3);
+  letter-spacing:.15em;text-transform:uppercase;
+  margin-bottom:16px;
+}
+.eyebrow-line{flex:1;height:1px;background:var(--border)}
+h1.page-title{
+  font-size:clamp(36px,5vw,56px);font-weight:800;
+  letter-spacing:-.04em;line-height:.95;
+  margin-bottom:14px;
+}
+h1.page-title em{font-style:italic;color:var(--amber)}
+.page-sub{
+  font-size:16px;color:var(--text2);font-weight:300;
+  line-height:1.7;max-width:580px;margin-bottom:36px;
+}
+h2.sec{
+  font-size:22px;font-weight:700;letter-spacing:-.02em;
+  margin:44px 0 16px;padding-bottom:12px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;
+}
+h2.sec .sec-num{
+  font-family:var(--fm);font-size:11px;color:var(--amber);
+  background:var(--amber-dim);border:1px solid rgba(232,160,32,.2);
+  padding:2px 8px;border-radius:4px;
+}
+h3.subsec{
+  font-family:var(--fm);font-size:11px;font-weight:500;
+  color:var(--text3);letter-spacing:.1em;text-transform:uppercase;
+  margin:24px 0 10px;
+}
+p.body{color:var(--text2);line-height:1.8;font-weight:300;margin-bottom:14px;font-size:14px}
+p.body strong{color:var(--text);font-weight:500}
+p.body em{color:var(--amber);font-style:italic}
+
+/* ═══════════════════════════════════ CALLOUTS */
+.callout{
+  border-radius:var(--r);padding:16px 18px;
+  margin:16px 0;border:1px solid;
+  display:flex;gap:14px;
+}
+.callout-icon{font-size:18px;flex-shrink:0;margin-top:1px}
+.callout-body{}
+.callout-title{font-size:13px;font-weight:600;margin-bottom:5px}
+.callout-text{font-size:13px;line-height:1.7;color:var(--text2);font-weight:300}
+.callout-text strong{color:var(--text);font-weight:500}
+.callout-text ul{margin:6px 0 0 16px}
+.callout-text li{margin-bottom:3px}
+.callout.warn{background:rgba(232,160,32,.06);border-color:rgba(232,160,32,.25)}
+.callout.warn .callout-title{color:var(--amber)}
+.callout.success{background:rgba(63,185,80,.06);border-color:rgba(63,185,80,.2)}
+.callout.success .callout-title{color:var(--green)}
+.callout.info{background:rgba(88,166,255,.06);border-color:rgba(88,166,255,.2)}
+.callout.info .callout-title{color:var(--blue)}
+.callout.danger{background:rgba(248,81,73,.06);border-color:rgba(248,81,73,.2)}
+.callout.danger .callout-title{color:var(--red)}
+
+/* FIXED BADGE */
+.badge-fix{
+  display:inline-flex;align-items:center;gap:4px;
+  font-family:var(--fm);font-size:9px;letter-spacing:.06em;
+  padding:2px 8px;border-radius:100px;
+  background:var(--green-dim);color:var(--green);
+  border:1px solid rgba(63,185,80,.3);
+  vertical-align:middle;margin-left:8px;
+}
+
+/* ═══════════════════════════════════ TABLES */
+.tbl-wrap{overflow-x:auto;margin:14px 0 20px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead tr{background:var(--navy3)}
+thead th{
+  padding:10px 14px;text-align:left;
+  font-family:var(--fm);font-size:10px;
+  color:var(--text3);letter-spacing:.08em;text-transform:uppercase;
+  border-bottom:1px solid var(--border);font-weight:400;
+}
+tbody tr{border-bottom:1px solid var(--border2);transition:background .15s}
+tbody tr:hover{background:rgba(255,255,255,.02)}
+tbody td{padding:10px 14px;color:var(--text2);vertical-align:top;line-height:1.6}
+tbody td strong{color:var(--text);font-weight:500}
+.tag{
+  display:inline-block;font-family:var(--fm);font-size:9px;
+  letter-spacing:.06em;padding:2px 7px;border-radius:4px;
+  border:1px solid;
+}
+.tag-a{background:var(--amber-dim);color:var(--amber);border-color:rgba(232,160,32,.3)}
+.tag-g{background:var(--green-dim);color:var(--green);border-color:rgba(63,185,80,.3)}
+.tag-r{background:rgba(248,81,73,.1);color:var(--red);border-color:rgba(248,81,73,.3)}
+.tag-b{background:var(--blue-dim);color:var(--blue);border-color:rgba(88,166,255,.3)}
+.tag-n{background:var(--navy3);color:var(--text3);border-color:var(--border)}
+
+/* ═══════════════════════════════════ CODE */
+pre{
+  background:var(--navy3);border:1px solid var(--border);
+  border-radius:var(--r);padding:18px 20px;
+  font-family:var(--fm);font-size:12px;line-height:1.8;
+  color:var(--text2);overflow-x:auto;margin:12px 0 20px;
+}
+pre .c{color:var(--text3)}
+pre .k{color:var(--blue)}
+pre .s{color:var(--amber)}
+pre .fn{color:var(--green)}
+
+/* ═══════════════════════════════════ CARDS */
+.card{
+  background:var(--navy2);border:1px solid var(--border);
+  border-radius:var(--r);padding:20px;margin-bottom:12px;
+  transition:border-color .2s,background .2s;
+}
+.card:hover{border-color:var(--border2);background:var(--navy3)}
+.card-title{font-size:15px;font-weight:600;margin-bottom:6px}
+.card-sub{font-size:13px;color:var(--text2);line-height:1.65;font-weight:300}
+
+/* ═══════════════════════════════════ STEP FLOW */
+.flow{display:flex;flex-direction:column;gap:0}
+.flow-item{
+  display:grid;grid-template-columns:48px 1fr;
+  gap:0;position:relative;
+}
+.flow-item:not(:last-child) .flow-spine::after{
+  content:'';position:absolute;left:23px;top:44px;bottom:-4px;
+  width:2px;background:var(--border);
+}
+.flow-spine{
+  position:relative;display:flex;
+  flex-direction:column;align-items:center;padding-top:16px;
+}
+.flow-num{
+  width:30px;height:30px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--fm);font-size:12px;font-weight:500;
+  z-index:1;flex-shrink:0;
+}
+.flow-num.normal{background:var(--navy4);border:1px solid var(--border);color:var(--text2)}
+.flow-num.warn{background:rgba(232,160,32,.15);border:1px solid rgba(232,160,32,.4);color:var(--amber)}
+.flow-num.danger{background:rgba(248,81,73,.12);border:1px solid rgba(248,81,73,.35);color:var(--red)}
+.flow-body{
+  background:var(--navy2);border:1px solid var(--border);
+  border-radius:var(--r);padding:14px 16px;
+  margin:8px 0 6px 0;transition:border-color .2s;
+}
+.flow-body:hover{border-color:var(--text3)}
+.flow-title{font-size:13px;font-weight:600;margin-bottom:4px}
+.flow-desc{font-size:12px;color:var(--text2);line-height:1.65;font-weight:300}
+.flow-warn{border-color:rgba(232,160,32,.3) !important;background:rgba(232,160,32,.04) !important}
+.flow-warn .flow-title{color:var(--amber)}
+
+/* ═══════════════════════════════════ PERSONA CARDS */
+.persona-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0}
+.persona{
+  background:var(--navy2);border:1px solid var(--border);
+  border-radius:var(--r);padding:20px;
+  transition:border-color .2s,transform .2s;
+}
+.persona:hover{border-color:var(--amber);transform:translateY(-3px)}
+.persona-emoji{font-size:28px;margin-bottom:10px}
+.persona-name{font-size:14px;font-weight:700;margin-bottom:3px}
+.persona-role{font-family:var(--fm);font-size:10px;color:var(--text3);margin-bottom:12px;letter-spacing:.04em}
+.persona-divider{height:1px;background:var(--border);margin-bottom:10px}
+.persona-prob{font-size:12px;color:var(--red);line-height:1.6;margin-bottom:6px}
+.persona-prob::before{content:'✗  '}
+.persona-fix{font-size:12px;color:var(--green);line-height:1.6}
+.persona-fix::before{content:'✓  '}
+
+/* ═══════════════════════════════════ COMPARE */
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:2px;margin:16px 0;border-radius:var(--r);overflow:hidden;border:1px solid var(--border)}
+.compare-col{}
+.compare-hdr{
+  padding:10px 14px;font-family:var(--fm);
+  font-size:10px;font-weight:500;letter-spacing:.06em;
+}
+.compare-col:first-child .compare-hdr{background:rgba(248,81,73,.1);color:var(--red)}
+.compare-col:last-child  .compare-hdr{background:var(--green-dim);color:var(--green)}
+.compare-row{
+  padding:10px 14px;font-size:12px;color:var(--text2);
+  border-top:1px solid var(--border2);line-height:1.65;font-weight:300;
+}
+.compare-col:first-child .compare-row{background:rgba(248,81,73,.03)}
+.compare-col:last-child  .compare-row{background:rgba(63,185,80,.03)}
+
+/* ═══════════════════════════════════ WEEK PLAN */
+.week-block{margin-bottom:28px}
+.week-hdr{
+  display:flex;align-items:center;gap:10px;
+  margin-bottom:12px;
+}
+.week-hdr h3{font-size:16px;font-weight:700;margin:0;letter-spacing:-.01em}
+.week-pill{
+  font-family:var(--fm);font-size:9px;padding:3px 10px;border-radius:100px;
+  background:var(--amber-dim);color:var(--amber);border:1px solid rgba(232,160,32,.3);
+}
+.day-table{width:100%;border-collapse:collapse;font-size:12px}
+.day-table thead tr{background:var(--navy3)}
+.day-table thead th{padding:8px 12px;font-family:var(--fm);font-size:9px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--border);font-weight:400;text-align:left}
+.day-table tbody tr{border-bottom:1px solid var(--border2);transition:background .15s}
+.day-table tbody tr:hover{background:rgba(232,160,32,.03)}
+.day-table td{padding:10px 12px;vertical-align:top;line-height:1.6}
+.day-num{font-family:var(--fm);font-weight:500;color:var(--amber);white-space:nowrap}
+.day-hrs{font-family:var(--fm);color:var(--text3);white-space:nowrap}
+.day-task{color:var(--text2);font-weight:300}
+.day-done{color:var(--text3);font-style:italic;font-size:11px}
+
+/* ═══════════════════════════════════ SKILL GRID */
+.skill-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}
+.skill-card{
+  background:var(--navy2);border:1px solid var(--border);
+  border-radius:var(--r);padding:20px;
+  transition:border-color .2s;
+}
+.skill-card:hover{border-color:var(--text3)}
+.skill-card-head{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.skill-icon{
+  width:34px;height:34px;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--fm);font-size:11px;font-weight:500;border:1px solid;
+}
+.skill-icon.strong{background:var(--amber-dim);color:var(--amber);border-color:rgba(232,160,32,.3)}
+.skill-icon.grow{background:var(--navy3);color:var(--text3);border-color:var(--border)}
+.skill-card-title{font-size:14px;font-weight:700}
+.skill-card-sub{font-size:11px;color:var(--text3)}
+.skill-row-item{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 10px;border-radius:7px;background:var(--navy3);
+  margin-bottom:5px;border:1px solid var(--border2);
+}
+.skill-name{font-size:12px;color:var(--text2)}
+.skill-lvl{font-family:var(--fm);font-size:9px;color:var(--text3);letter-spacing:.05em}
+.skill-lvl.on{color:var(--amber)}
+
+/* ═══════════════════════════════════ SCHEMA BLOCK */
+.schema{
+  background:var(--navy2);border:1px solid var(--border);
+  border-radius:var(--r);overflow:hidden;margin-bottom:14px;
+}
+.schema-head{
+  background:var(--navy3);padding:10px 16px;
+  display:flex;align-items:center;gap:10px;
+  border-bottom:1px solid var(--border);
+  font-family:var(--fm);font-size:12px;color:var(--text);font-weight:500;
+}
+.schema-tag{
+  font-size:9px;padding:2px 7px;border-radius:4px;
+  background:var(--blue-dim);color:var(--blue);border:1px solid rgba(88,166,255,.25);
+}
+.schema pre{border:none;border-radius:0;margin:0;background:transparent;padding:14px 16px}
+
+/* ═══════════════════════════════════ CHECKLIST */
+.checklist{list-style:none;margin:12px 0}
+.check-item{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:9px 12px;border-radius:8px;
+  font-size:13px;color:var(--text2);line-height:1.65;
+  border:1px solid transparent;margin-bottom:4px;
+  cursor:pointer;transition:all .15s;user-select:none;
+  font-weight:300;
+}
+.check-item:hover{background:var(--navy3);border-color:var(--border)}
+.check-item.done{color:var(--text3);background:var(--navy3)}
+.check-box{
+  width:16px;height:16px;border-radius:4px;
+  border:1px solid var(--border);flex-shrink:0;margin-top:1px;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .15s;
+}
+.check-item.done .check-box{background:var(--green);border-color:var(--green)}
+.check-tick{display:none;color:var(--navy);font-size:10px;font-weight:700;line-height:1}
+.check-item.done .check-tick{display:block}
+.check-item.done span{text-decoration:line-through}
+.check-progress{
+  margin-top:24px;padding:18px 20px;
+  background:var(--navy2);border:1px solid var(--border);border-radius:var(--r);
+}
+.cp-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.cp-label{font-size:13px;font-weight:500}
+.cp-val{font-family:var(--fm);font-size:13px;color:var(--amber)}
+.cp-bar-bg{height:5px;background:var(--navy4);border-radius:3px}
+.cp-bar{height:5px;border-radius:3px;background:var(--green);transition:width .4s var(--ease,cubic-bezier(.16,1,.3,1))}
+
+/* ═══════════════════════════════════ BUDGET BARS */
+.budget-row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.budget-label{font-size:12px;color:var(--text2);min-width:180px}
+.budget-bg{flex:1;height:5px;background:var(--navy4);border-radius:3px}
+.budget-fill{height:5px;border-radius:3px;background:var(--amber);transition:width .6s .2s}
+.budget-val{font-family:var(--fm);font-size:11px;color:var(--amber);min-width:50px;text-align:right}
+
+/* ═══════════════════════════════════ ═══════════════════════════════════
+   WIREFRAMES
+═══════════════════════════════════ ═══════════════════════════════════ */
+.wf-section{margin:32px 0}
+.wf-label{
+  font-family:var(--fm);font-size:10px;color:var(--text3);
+  letter-spacing:.12em;text-transform:uppercase;
+  margin-bottom:12px;display:flex;align-items:center;gap:8px;
+}
+.wf-label::before{content:'';width:16px;height:1px;background:var(--amber)}
+.wf-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.wf-grid.single{grid-template-columns:1fr}
+.wf-grid.three{grid-template-columns:repeat(3,1fr)}
+
+/* Phone frame */
+.phone-frame{
+  background:var(--navy3);border:2px solid var(--text3);
+  border-radius:28px;padding:12px;
+  max-width:220px;margin:0 auto;position:relative;
+}
+.phone-frame::before{
+  content:'';display:block;width:60px;height:6px;
+  background:var(--border);border-radius:3px;margin:0 auto 12px;
+}
+.phone-frame::after{
+  content:'';display:block;width:32px;height:32px;
+  border:2px solid var(--border);border-radius:50%;
+  margin:10px auto 0;
+}
+.phone-screen{
+  background:var(--navy);border-radius:16px;padding:10px;
+  border:1px solid var(--border2);min-height:340px;
+}
+
+/* Desktop frame */
+.desktop-frame{
+  background:var(--navy3);border:2px solid var(--text3);
+  border-radius:12px;padding:0;overflow:hidden;
+}
+.desktop-bar{
+  background:var(--navy4);padding:8px 12px;
+  display:flex;align-items:center;gap:6px;
+  border-bottom:1px solid var(--border);
+}
+.desktop-dot{width:9px;height:9px;border-radius:50%}
+.desktop-url{
+  flex:1;background:var(--navy3);border-radius:4px;
+  padding:3px 10px;font-family:var(--fm);font-size:9px;
+  color:var(--text3);margin:0 8px;
+}
+.desktop-screen{background:var(--navy);padding:0;min-height:220px}
+
+/* WF atoms */
+.wf-block{background:var(--navy4);border-radius:4px;height:10px;margin-bottom:5px}
+.wf-block.h20{height:20px}
+.wf-block.h30{height:30px}
+.wf-block.h40{height:40px}
+.wf-block.h48{height:48px}
+.wf-block.h60{height:60px}
+.wf-block.amber{background:rgba(232,160,32,.25)}
+.wf-block.amber-s{background:rgba(232,160,32,.15)}
+.wf-block.blue{background:rgba(88,166,255,.2)}
+.wf-block.green{background:rgba(63,185,80,.2)}
+.wf-block.w40{width:40%}
+.wf-block.w50{width:50%}
+.wf-block.w60{width:60%}
+.wf-block.w70{width:70%}
+.wf-block.w80{width:80%}
+.wf-block.full{width:100%}
+.wf-row{display:flex;gap:6px;margin-bottom:5px}
+.wf-text{
+  font-family:var(--fm);font-size:8px;color:var(--text3);
+  letter-spacing:.06em;text-transform:uppercase;
+  margin-bottom:4px;
+}
+.wf-label-tag{
+  display:inline-block;font-family:var(--fm);font-size:8px;
+  padding:2px 6px;border-radius:3px;
+  background:var(--amber-dim);color:var(--amber);
+  border:1px solid rgba(232,160,32,.2);margin-bottom:6px;
+}
+.wf-nav{
+  background:var(--navy4);padding:8px 10px;
+  display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid var(--border2);margin-bottom:0;
+}
+.wf-nav-brand{width:40px;height:8px;background:var(--amber-s,rgba(232,160,32,.3));border-radius:3px}
+.wf-nav-links{display:flex;gap:5px}
+.wf-nav-link{width:24px;height:5px;background:var(--navy3);border-radius:2px}
+.wf-nav-cta{width:36px;height:16px;background:rgba(232,160,32,.3);border-radius:3px}
+.wf-sidebar-layout{display:flex;gap:0;height:200px}
+.wf-sidebar-col{
+  width:52px;background:var(--navy3);
+  border-right:1px solid var(--border2);
+  padding:8px;flex-shrink:0;
+}
+.wf-sidebar-item{
+  height:14px;border-radius:2px;margin-bottom:4px;
+  background:var(--navy4);
+}
+.wf-sidebar-item.active{background:rgba(232,160,32,.25)}
+.wf-main-col{flex:1;padding:8px;overflow:hidden}
+.wf-card{
+  background:var(--navy3);border:1px solid var(--border2);
+  border-radius:5px;padding:8px;margin-bottom:6px;
+}
+.wf-kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:6px}
+.wf-kpi{background:var(--navy4);border-radius:4px;padding:6px;text-align:center}
+.wf-kpi-num{
+  font-family:var(--fm);font-size:13px;font-weight:500;color:var(--amber);
+}
+.wf-kpi-lbl{font-family:var(--fm);font-size:7px;color:var(--text3)}
+.wf-table-hdr{
+  display:grid;grid-template-columns:1fr 1fr 60px;
+  background:var(--navy4);padding:4px 6px;border-radius:3px 3px 0 0;
+  gap:4px;margin-bottom:0;
+}
+.wf-table-hdr>div,.wf-table-row>div{
+  height:5px;background:var(--text3);border-radius:2px;opacity:.4;
+}
+.wf-table-row{
+  display:grid;grid-template-columns:1fr 1fr 60px;
+  padding:5px 6px;border-bottom:1px solid var(--border2);gap:4px;
+}
+.wf-table-row>div:last-child{background:var(--amber);opacity:.5;height:12px;border-radius:3px}
+.wf-service-card{
+  background:var(--navy3);border:1px solid var(--border2);
+  border-radius:5px;padding:8px;margin-bottom:5px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.wf-sc-left{}
+.wf-sc-title{width:60px;height:6px;background:var(--text2);border-radius:2px;margin-bottom:3px}
+.wf-sc-sub{width:40px;height:4px;background:var(--text3);border-radius:2px}
+.wf-sc-right{width:24px;height:20px;border-radius:3px;background:rgba(232,160,32,.3)}
+.wf-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin:4px 0}
+.wf-day{
+  aspect-ratio:1;border-radius:2px;
+  background:var(--navy4);display:flex;align-items:center;justify-content:center;
+  font-family:var(--fm);font-size:5px;color:var(--text3);
+}
+.wf-day.active{background:rgba(232,160,32,.3);color:var(--amber)}
+.wf-day.grey{opacity:.3}
+.wf-slots{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:4px}
+.wf-slot{
+  padding:4px;border-radius:3px;text-align:center;
+  background:var(--navy4);border:1px solid var(--border2);
+  font-family:var(--fm);font-size:7px;color:var(--text3);
+}
+.wf-slot.sel{background:rgba(232,160,32,.2);border-color:rgba(232,160,32,.4);color:var(--amber)}
+.wf-slot.taken{opacity:.3}
+.wf-confirm-page{padding:10px;text-align:center}
+.wf-check-circle{
+  width:32px;height:32px;border-radius:50%;
+  background:var(--green-dim);border:2px solid var(--green);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 8px;font-size:14px;color:var(--green);
+}
+.wf-caption{
+  font-family:var(--fm);font-size:10px;color:var(--text3);
+  text-align:center;margin-top:8px;letter-spacing:.04em;
+}
+
+/* ═══════════════════════════════════ MOBILE OVERLAY */
+#mob-overlay{
+  display:none;position:fixed;inset:0;z-index:200;
+  background:rgba(0,0,0,.7);backdrop-filter:blur(4px);
+}
+#mob-overlay.open{display:block}
+#sidebar.mob-open{transform:translateX(0) !important}
+
+/* ═══════════════════════════════════ RESPONSIVE */
+@media(max-width:768px){
+  #sidebar{
+    position:fixed;left:0;top:0;bottom:0;z-index:300;
+    transform:translateX(-100%);transition:transform .3s;
+    width:280px;
+  }
+  .topbar{padding:0 16px}
+  .topbar-menu-btn{display:flex;align-items:center}
+  .page{padding:24px 20px 60px}
+  h1.page-title{font-size:32px}
+  .persona-grid{grid-template-columns:1fr}
+  .compare{grid-template-columns:1fr}
+  .skill-grid{grid-template-columns:1fr}
+  .wf-grid{grid-template-columns:1fr}
+  .wf-grid.three{grid-template-columns:1fr}
+  .wf-grid.desktop{display:none}
+  .wf-label-only{display:block}
+}
+</style>
+</head>
+<body>
+
+<div id="shell">
+<!-- ═══════════════ SIDEBAR ═══════════════ -->
+<nav id="sidebar">
+  <div class="sb-head">
+    <div class="sb-logo">
+      <div class="sb-logo-mark">B/</div>
+      <div class="sb-logo-text">BookingOS</div>
+    </div>
+    <div class="sb-version">v1.3 — web-only · path-based routing</div>
+    <div class="sb-score">
+      <div class="score-card">
+        <div class="score-num">8.5</div>
+        <div class="score-lbl">portfolio /10</div>
+      </div>
+      <div class="score-card">
+        <div class="score-num">7.0</div>
+        <div class="score-lbl">saas /10</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sb-nav">
+    <div class="sb-group-lbl">documents</div>
+    <button class="sb-btn active" onclick="show('prd',this)"><span class="num">01</span>PRD — Product Requirements</button>
+    <button class="sb-btn" onclick="show('trd',this)"><span class="num">02</span>Technical Requirements</button>
+    <button class="sb-btn" onclick="show('flow',this)"><span class="num">03</span>App Flows</button>
+    <button class="sb-btn" onclick="show('uiux',this)"><span class="num">04</span>UI / UX Brief + Wireframes</button>
+    <button class="sb-btn" onclick="show('plan',this)"><span class="num">05</span>Schema & Build Plan</button>
+    <div class="sb-group-lbl">v1.3 additions</div>
+    <button class="sb-btn" onclick="show('fixes',this)"><span class="num">⚠</span>All Fixes &amp; Decisions<span class="dot-fix"></span></button>
+    <button class="sb-btn" onclick="show('predev',this)"><span class="num">06</span>Pre-Dev Setup</button>
+    <button class="sb-btn" onclick="show('auth',this)"><span class="num">07</span>Auth Architecture</button>
+    <button class="sb-btn" onclick="show('deploy',this)"><span class="num">08</span>Deployment &amp; Routing</button>
+    <button class="sb-btn" onclick="show('features',this)"><span class="num">09</span>Feature Build Guide</button>
+    <button class="sb-btn" onclick="show('check',this)"><span class="num">✓</span>Pre-launch Checklist</button>
+  </div>
+
+  <div class="sb-footer">v1.3 · June 2025 · Viraj Patil</div>
+</nav>
+
+<div id="mob-overlay" onclick="closeMob()"></div>
+
+<!-- ═══════════════ MAIN ═══════════════ -->
+<div id="main">
+  <div class="topbar">
+    <button class="topbar-menu-btn" onclick="openMob()" aria-label="Menu">☰</button>
+    <div class="topbar-doc">BookingOS / <span id="topbar-title">PRD</span></div>
+    <span class="topbar-chip chip-amber">v1.3</span>
+    <span class="topbar-chip chip-green">web only</span>
+  </div>
+
+<!-- ════════════════════════════════════════════════
+     01 PRD
+════════════════════════════════════════════════ -->
+<div class="page active" id="page-prd">
+  <div class="eyebrow">01 — product requirements document<div class="eyebrow-line"></div></div>
+  <h1 class="page-title">What we're<br><em>building.</em></h1>
+  <p class="page-sub">A white-label appointment booking platform. One codebase, many business clients. Each gets their own subdomain, branding, and isolated data.</p>
+
+  <div class="callout info">
+    <div class="callout-icon">💡</div>
+    <div class="callout-body">
+      <div class="callout-title">One-sentence pitch</div>
+      <div class="callout-text">The booking infrastructure layer small Indian service businesses pay ₹1,500–5,000/month for — delivered as a one-time ₹8,000–20,000 setup with a self-hosted subdomain.</div>
+    </div>
+  </div>
+
+  <div class="callout success">
+    <div class="callout-icon">🌐</div>
+    <div class="callout-body">
+      <div class="callout-title">Platform: Web only — all three projects</div>
+      <div class="callout-text">All projects in this portfolio are <strong>web applications only</strong>. No React Native, no Expo, no app store. The public booking flow is <strong>mobile-responsive</strong> — it works on any phone browser at 375px — but there is no native mobile app. This distinction matters when pitching to clients: "works on any phone" (browser) is a feature, "has a native app" is a separate project.</div>
+    </div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">§1</span> Problem Statement</h2>
+  <p class="body">Small service businesses in India manage appointments through WhatsApp, phone calls, and paper diaries. This creates <strong>double-bookings, no-shows without notice</strong>, and zero visibility for customers who want to book outside working hours.</p>
+  <p class="body">Existing solutions charge ₹1,500–5,000/month, are not localised for Indian timezones, and require ongoing subscriptions. A one-time build with a setup fee undercuts all of them.</p>
+
+  <h2 class="sec"><span class="sec-num">§2</span> Who Uses It</h2>
+  <div class="persona-grid">
+    <div class="persona">
+      <div class="persona-emoji">👩‍⚕️</div>
+      <div class="persona-name">Dr. Anita</div>
+      <div class="persona-role">CLINIC OWNER (TENANT)</div>
+      <div class="persona-divider"></div>
+      <div class="persona-prob">Receptionist misses WhatsApp messages. Double-bookings happen weekly.</div>
+      <div class="persona-fix">All bookings in one dashboard. Email alerts on every new booking.</div>
+    </div>
+    <div class="persona">
+      <div class="persona-emoji">💈</div>
+      <div class="persona-name">Ravi</div>
+      <div class="persona-role">SALON STAFF</div>
+      <div class="persona-divider"></div>
+      <div class="persona-prob">Calls owner every morning for the day's schedule.</div>
+      <div class="persona-fix">Logs in, sees all appointments. Role-restricted access.</div>
+    </div>
+    <div class="persona">
+      <div class="persona-emoji">📱</div>
+      <div class="persona-name">Priya</div>
+      <div class="persona-role">CUSTOMER</div>
+      <div class="persona-divider"></div>
+      <div class="persona-prob">Clinic closed when she has time to call. No confirmation.</div>
+      <div class="persona-fix">Books at 11 PM from phone. Gets email + .ics attachment.</div>
+    </div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">§3</span> V1 Scope</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Feature</th><th>Priority</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Tenant registration + subdomain</strong></td><td><span class="tag tag-g">P0</span></td><td>Core of the multi-tenant model</td></tr>
+        <tr><td><strong>Public booking flow</strong></td><td><span class="tag tag-g">P0</span></td><td>Mobile-first, no account required</td></tr>
+        <tr><td><strong>Availability engine</strong></td><td><span class="tag tag-g">P0</span></td><td>Serializable TX — see TRD for race condition fix</td></tr>
+        <tr><td><strong>Admin dashboard</strong></td><td><span class="tag tag-g">P0</span></td><td>View, confirm, cancel bookings</td></tr>
+        <tr><td><strong>Service + schedule management</strong></td><td><span class="tag tag-g">P0</span></td><td>Required for accurate availability</td></tr>
+        <tr><td><strong>Email notifications</strong></td><td><span class="tag tag-g">P0</span></td><td>Confirmation, reminder, cancellation</td></tr>
+        <tr><td>Staff accounts + roles</td><td><span class="tag tag-a">P1</span></td><td>Week 4</td></tr>
+        <tr><td>Tenant branding (logo, colour)</td><td><span class="tag tag-a">P1</span></td><td>Makes demo convincing</td></tr>
+        <tr><td>Customer cancel via email link</td><td><span class="tag tag-a">P1</span></td><td>Reduces admin workload</td></tr>
+        <tr><td>Payments (Razorpay)</td><td><span class="tag tag-n">V2</span></td><td>Deliberately deferred</td></tr>
+        <tr><td>SMS notifications</td><td><span class="tag tag-n">V2</span></td><td>Deliberately deferred</td></tr>
+        <tr><td>Analytics / reporting dashboard</td><td><span class="tag tag-n">V2</span></td><td>Deliberately deferred</td></tr>
+        <tr><td>Native mobile app</td><td><span class="tag tag-r">OUT</span></td><td>All three projects are web-only. Public booking flow is mobile-responsive (works in any phone browser) — no native app.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout warn">
+    <div class="callout-icon">⚠</div>
+    <div class="callout-body">
+      <div class="callout-title">Honest scope note</div>
+      <div class="callout-text">V1 deliberately omits: billing/subscriptions, monitoring/alerting, database backups beyond Railway defaults, support workflows, GDPR data export. These are real SaaS concerns — deferred because this is a portfolio project. Budget 60+ additional hours before charging real money.</div>
+    </div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">§4</span> Target Client (Updated)</h2>
+  <p class="body">Based on critique: <strong>start with salons, personal trainers, tutors, photographers, consultants</strong> — not clinics. The technical build is identical but these clients are easier to acquire, have simpler workflows, and fewer legal/privacy concerns. Clinics come after V1 is stable with 2–3 non-healthcare clients.</p>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     02 TRD
+════════════════════════════════════════════════ -->
+<div class="page" id="page-trd">
+  <div class="eyebrow">02 — technical requirements document<div class="eyebrow-line"></div></div>
+  <h1 class="page-title">How we're<br><em>building it.</em></h1>
+  <p class="page-sub">Every tech decision, the schema, the API contract, and the security requirements — with the reason behind each choice.</p>
+
+  <div class="callout warn">
+    <div class="callout-icon">⚠</div>
+    <div class="callout-body">
+      <div class="callout-title">v1.3 changes to this document</div>
+      <div class="callout-text"><strong>NextAuth removed.</strong> Auth runs on Express custom JWT only — see §07 Auth Architecture. <strong>Turborepo removed.</strong> pnpm workspaces only. <strong>Subdomain routing replaced</strong> with path-based App Router routing — see §08 Deployment.</div>
+    </div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">§1</span> Architecture</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Service</th><th>Tech</th><th>Host</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Frontend</strong></td><td>Next.js 14 App Router</td><td>Vercel</td><td>App Router [slug] folder handles tenant routing natively. SSR for SEO on public booking pages.</td></tr>
+        <tr><td><strong>API</strong></td><td>Node.js 18 + Express</td><td>Railway</td><td>Persistent server for complex middleware chains. Must hold RLS session state per request.</td></tr>
+        <tr><td><strong>Database</strong></td><td>PostgreSQL 15</td><td>Railway</td><td>RLS support — MongoDB has no native tenant isolation</td></tr>
+        <tr><td><strong>ORM</strong></td><td>Prisma 5</td><td>Bundled</td><td>Type-safe queries, schema-as-code migrations</td></tr>
+        <tr><td><strong>Auth</strong></td><td>Custom JWT (Express only)</td><td>Bundled</td><td>NextAuth removed — conflicts with Express RLS middleware. Custom JWT gives full control. See §07.</td></tr>
+        <tr><td><strong>Email</strong></td><td>Resend</td><td>External</td><td>React Email templates, 3k free/month</td></tr>
+        <tr><td><strong>Monorepo</strong></td><td>pnpm workspaces</td><td>—</td><td>Turborepo removed — zero benefit at this scale for a solo developer.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">§2</span> Multi-Tenancy: Why RLS</h2>
+  <div class="compare">
+    <div class="compare-col">
+      <div class="compare-hdr">✗ Application WHERE filters only</div>
+      <div class="compare-row">One bug in one route exposes all tenant data</div>
+      <div class="compare-row">No database-level enforcement</div>
+      <div class="compare-row">Cannot audit at the DB layer</div>
+      <div class="compare-row">Junior-level pattern — interviewers know the risk</div>
+    </div>
+    <div class="compare-col">
+      <div class="compare-hdr">✓ PostgreSQL Row-Level Security</div>
+      <div class="compare-row">Survives application bugs — DB enforces isolation</div>
+      <div class="compare-row">Session variable sets tenant context per request</div>
+      <div class="compare-row">Auditable with EXPLAIN — policies are first-class</div>
+      <div class="compare-row">Senior-level signal — explicitly tested in interviews</div>
+    </div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">§3</span> Race Condition Handling <span class="badge-fix">FIXED</span></h2>
+  <div class="callout warn">
+    <div class="callout-icon">⚠</div>
+    <div class="callout-body">
+      <div class="callout-title">Original claim was wrong</div>
+      <div class="callout-text">v1.0 claimed "no double-bookings ever." Under heavy concurrent traffic, row locking alone is insufficient without the correct transaction isolation level. <strong>The correct claim: double-booking prevention using SELECT FOR UPDATE within a SERIALIZABLE transaction, validated by load testing.</strong></div>
+    </div>
+  </div>
+<pre>
+<span class="c">// apps/api/src/routes/bookings.ts</span>
+<span class="k">await</span> prisma.$transaction(
+  <span class="k">async</span> (tx) => {
+    <span class="c">// SELECT FOR UPDATE + SKIP LOCKED = row-level lock</span>
+    <span class="k">const</span> conflict = <span class="k">await</span> tx.$queryRaw<span class="s">`
+      SELECT id FROM "Booking"
+      WHERE "tenantId" = ${tenantId}
+        AND status NOT IN ('CANCELLED')
+        AND "startsAt" &lt; ${endsAt}
+        AND "endsAt"   > ${startsAt}
+      FOR UPDATE SKIP LOCKED
+    `</span>;
+    <span class="k">if</span> (conflict.length > 0) <span class="k">throw new</span> Error(<span class="s">'SLOT_TAKEN'</span>);
+    <span class="k">return</span> tx.booking.create({ data: bookingData });
+  },
+  { isolationLevel: <span class="s">'Serializable'</span> } <span class="c">// ← critical line</span>
+);</pre>
+
+  <div class="callout success">
+    <div class="callout-icon">✓</div>
+    <div class="callout-body">
+      <div class="callout-title">Load test requirement before claiming production-ready</div>
+      <div class="callout-text">50 simultaneous POST requests to the same slot → exactly 1 booking created, 49 SLOT_TAKEN responses. Only after this passes can you claim double-booking prevention.</div>
+    </div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">§4</span> Auth Design</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Token</th><th>Expiry</th><th>Storage</th><th>Rotation</th></tr></thead>
+      <tbody>
+        <tr><td>Access token (JWT)</td><td>15 minutes</td><td>React state (memory only)</td><td>Via refresh on 401</td></tr>
+        <tr><td>Refresh token (opaque)</td><td>7 days</td><td>httpOnly Secure cookie</td><td>Rotated on every use</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">§5</span> API Contract</h2>
+  <h3 class="subsec">Public — no auth required</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Method</th><th>Path</th><th>Returns</th></tr></thead>
+      <tbody>
+        <tr><td><span class="tag tag-b">GET</span></td><td>/public/:slug/services</td><td>Active services for tenant</td></tr>
+        <tr><td><span class="tag tag-b">GET</span></td><td>/public/:slug/availability</td><td>Available slots for service + date</td></tr>
+        <tr><td><span class="tag tag-g">POST</span></td><td>/public/:slug/bookings</td><td>Creates booking, triggers email</td></tr>
+        <tr><td><span class="tag tag-b">GET</span></td><td>/public/bookings/cancel/:token</td><td>Validates token, shows booking</td></tr>
+        <tr><td><span class="tag tag-r">DELETE</span></td><td>/public/bookings/cancel/:token</td><td>Cancels booking, sends emails</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3 class="subsec">Admin — JWT required</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><span class="tag tag-b">GET</span></td><td>/admin/bookings</td><td>List with status/date/service filters</td></tr>
+        <tr><td><span class="tag tag-a">PATCH</span></td><td>/admin/bookings/:id</td><td>Update status (confirm/cancel/complete)</td></tr>
+        <tr><td><span class="tag tag-g">POST</span></td><td>/admin/services</td><td>Create service</td></tr>
+        <tr><td><span class="tag tag-a">PUT</span></td><td>/admin/schedule</td><td>Update schedule config</td></tr>
+        <tr><td><span class="tag tag-g">POST</span></td><td>/admin/staff/invite</td><td>Send invitation email</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     03 FLOWS
+════════════════════════════════════════════════ -->
+<div class="page" id="page-flow">
+  <div class="eyebrow">03 — application flows<div class="eyebrow-line"></div></div>
+  <h1 class="page-title">How users<br><em>move through it.</em></h1>
+  <p class="page-sub">Every user journey — happy paths and the edge cases that destroy user trust if you miss them.</p>
+
+  <h2 class="sec"><span class="sec-num">§1</span> Customer Books an Appointment</h2>
+  <div class="flow">
+    <div class="flow-item">
+      <div class="flow-spine"><div class="flow-num normal">1</div></div>
+      <div class="flow-body"><div class="flow-title">Visits clinic subdomain</div><div class="flow-desc">Next.js middleware detects subdomain, rewrites to /booking/[slug]. Tenant branding (logo, colour) loaded. Service list rendered.</div></div>
+    </div>
+    <div class="flow-item">
+      <div class="flow-spine"><div class="flow-num normal">2</div></div>
+      <div class="flow-body"><div class="flow-title">Selects a service</div><div class="flow-desc">Full-width tap targets. Name + duration + price. Tap navigates to date picker with URL updated.</div></div>
+    </div>
+    <div class="flow-item">
+      <div class="flow-spine"><div class="flow-num normal">3</div></div>
+      <div class="flow-body"><div class="flow-title">Picks a date</div><div class="flow-desc">Calendar grid. Past dates greyed. Dates with zero available slots also greyed out.</div></div>
+    </div>
+    <div class="flow-item">
+      <div class="flow-spine"><div class="flow-num warn">4</div></div>
+      <div class="flow-body flow-warn"><div class="flow-title">Time slots load ← edge case</div><div class="flow-desc">GET /public/:slug/availability returns array. If empty → "No times available — try another day" with next-available-date hint. Skeleton shown while loading.</div></div>
+    </div>
+    <div class="flow-item">
+      <div class="flow-spine"><div class="flow-num normal">5</div></div>
+      <div class="flow-body"><div class="flow-title">Fills customer details + submits</div><div class="flow-desc">Name, email (required). Phone, notes (optional — labelled clearly). Single column, large inputs.</div></div>
+    </div>
+    <div class="flow-item">
+      <div class="flow-spine"><div class="flow-num warn">6</div></div>
+      <div class="flow-body flow-warn"><div class="flow-title">Race condition check ← critical</div><div class="flow-desc">POST runs SELECT FOR UPDATE in SERIALIZABLE transaction. If slot taken since step 4 → 409 → "This slot was just taken — choose another time." Redirect back to slots.</div></div>
+    </div>
+    <div class="flow-item">
+      <div class="flow-spine"><div class="flow-num normal">7</div></div>
+      <div class="flow-body"><div class="flow-title">Confirmation page + email</div><div class="flow-desc">Full-screen success. Confirmation email via Resend with .ics calendar attachment + cancel link (unique cancelToken).</div></div>
+    </div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">§2</span> Admin Manages Bookings</h2>
+  <div class="flow">
+    <div class="flow-item">
+      <div class="flow-spine"><div class="flow-num normal">1</div></div>
+      <div class="flow-body"><div class="flow-title">Logs in at /admin</div><div class="flow-desc">Access token → React state. Refresh token → httpOnly cookie. Never localStorage.</div></div>
+    </div>
+    <div class="flow-item">
+      <div class="flow-spine"><div class="flow-num normal">2</div></div>
+      <div class="flow-body"><div class="flow-title">Confirms or cancels a booking</div><div class="flow-desc">Optimistic UI: badge updates immediately. API fires in background. On failure → badge reverts + error toast.</div></div>
+    </div>
+    <div class="flow-item">
+      <div class="flow-spine"><div class="flow-num warn">3</div></div>
+      <div class="flow-body flow-warn"><div class="flow-title">Session expires (15 min) ← handle silently</div><div class="flow-desc">Next API call returns 401. Frontend silently calls POST /auth/refresh. If succeeds → retry request, user notices nothing. If fails → redirect to login.</div></div>
+    </div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">§3</span> Error States Reference</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Scenario</th><th>User Sees</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Slot taken during booking</td><td>"This slot was just booked. Choose another time."</td><td>409</td></tr>
+        <tr><td>Invalid cancel token</td><td>"This link is invalid or already used."</td><td>404</td></tr>
+        <tr><td>Tenant not found</td><td>"We couldn't find this booking page."</td><td>404</td></tr>
+        <tr><td>All slots blocked</td><td>"No times available. Try another day."</td><td>200 empty array</td></tr>
+        <tr><td>Email send failure</td><td>Booking still created. Email retry queued.</td><td>200 (booking ok)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     04 UI/UX + WIREFRAMES
+════════════════════════════════════════════════ -->
+<div class="page" id="page-uiux">
+  <div class="eyebrow">04 — UI / UX brief + wireframes<div class="eyebrow-line"></div></div>
+  <h1 class="page-title">How it looks<br><em>and feels.</em></h1>
+  <p class="page-sub">Design decisions grounded in real usage. Wireframes of every key screen — not Dribbble shots, actual product thinking.</p>
+
+  <div class="callout success">
+    <div class="callout-icon">✦</div>
+    <div class="callout-body">
+      <div class="callout-title">Design principle</div>
+      <div class="callout-text">Can a 55-year-old clinic owner use this without a tutorial? If yes — the design is right. If it needs explanation — it is wrong.</div>
+    </div>
+  </div>
+
+  <!-- WIREFRAME: Public Booking Flow -->
+  <h2 class="sec"><span class="sec-num">§1</span> Public Booking Flow — Mobile</h2>
+  <p class="body">Customer-facing. Designed mobile-first. No account required. Three screens to booking.</p>
+
+  <div class="wf-label">wireframe · mobile booking flow</div>
+  <div class="wf-grid" style="grid-template-columns:repeat(3,1fr)">
+
+    <!-- Screen 1: Service List -->
+    <div>
+      <div class="phone-frame">
+        <div class="phone-screen">
+          <div class="wf-nav" style="margin-bottom:8px">
+            <div class="wf-nav-brand"></div>
+            <div style="width:30px;height:5px;background:var(--text3);border-radius:2px"></div>
+          </div>
+          <div style="padding:0 6px">
+            <div class="wf-text">BOOK AN APPOINTMENT</div>
+            <div class="wf-block h20 amber-s full" style="margin-bottom:8px"></div>
+            <div class="wf-service-card">
+              <div class="wf-sc-left"><div class="wf-sc-title"></div><div class="wf-sc-sub"></div></div>
+              <div class="wf-sc-right"></div>
+            </div>
+            <div class="wf-service-card">
+              <div class="wf-sc-left"><div class="wf-sc-title"></div><div class="wf-sc-sub"></div></div>
+              <div class="wf-sc-right"></div>
+            </div>
+            <div class="wf-service-card">
+              <div class="wf-sc-left"><div class="wf-sc-title"></div><div class="wf-sc-sub"></div></div>
+              <div class="wf-sc-right"></div>
+            </div>
+            <div class="wf-service-card" style="opacity:.4">
+              <div class="wf-sc-left"><div class="wf-sc-title"></div><div class="wf-sc-sub"></div></div>
+              <div class="wf-sc-right"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="wf-caption">Step 1 — Service list</div>
+    </div>
+
+    <!-- Screen 2: Date + Slot -->
+    <div>
+      <div class="phone-frame">
+        <div class="phone-screen">
+          <div style="padding:8px 6px">
+            <div class="wf-text">SELECT DATE</div>
+            <div class="wf-cal">
+              <div class="wf-day grey">S</div><div class="wf-day grey">M</div><div class="wf-day grey">T</div><div class="wf-day grey">W</div><div class="wf-day">T</div><div class="wf-day">F</div><div class="wf-day">S</div>
+              <div class="wf-day grey"></div><div class="wf-day grey"></div><div class="wf-day grey"></div><div class="wf-day grey"></div><div class="wf-day">1</div><div class="wf-day">2</div><div class="wf-day">3</div>
+              <div class="wf-day">4</div><div class="wf-day active">5</div><div class="wf-day">6</div><div class="wf-day">7</div><div class="wf-day">8</div><div class="wf-day">9</div><div class="wf-day grey"></div>
+              <div class="wf-day">11</div><div class="wf-day">12</div><div class="wf-day">13</div><div class="wf-day">14</div><div class="wf-day">15</div><div class="wf-day grey"></div><div class="wf-day grey"></div>
+            </div>
+            <div class="wf-text" style="margin-top:8px">SELECT TIME</div>
+            <div class="wf-slots">
+              <div class="wf-slot">9:00 AM</div>
+              <div class="wf-slot sel">10:30 AM</div>
+              <div class="wf-slot taken">11:00 AM</div>
+              <div class="wf-slot">2:00 PM</div>
+              <div class="wf-slot">3:30 PM</div>
+              <div class="wf-slot taken">4:00 PM</div>
+            </div>
+            <div class="wf-block h30 amber full" style="margin-top:8px;border-radius:5px"></div>
+          </div>
+        </div>
+      </div>
+      <div class="wf-caption">Step 2 — Date + time slot</div>
+    </div>
+
+    <!-- Screen 3: Confirmation -->
+    <div>
+      <div class="phone-frame">
+        <div class="phone-screen">
+          <div class="wf-confirm-page">
+            <div style="height:40px"></div>
+            <div class="wf-check-circle">✓</div>
+            <div class="wf-block h10 green w60" style="margin:6px auto"></div>
+            <div class="wf-block h6 w80" style="margin:4px auto"></div>
+            <div style="height:16px"></div>
+            <div class="wf-card">
+              <div class="wf-block h6 w60" style="margin-bottom:6px"></div>
+              <div class="wf-block h6 w80" style="margin-bottom:4px"></div>
+              <div class="wf-block h6 w50"></div>
+            </div>
+            <div style="height:8px"></div>
+            <div class="wf-block h20 blue full" style="border-radius:4px;margin-bottom:5px"></div>
+            <div class="wf-block h6 w60" style="margin:0 auto;opacity:.4"></div>
+          </div>
+        </div>
+      </div>
+      <div class="wf-caption">Step 3 — Confirmation</div>
+    </div>
+  </div>
+
+  <!-- WIREFRAME: Admin Dashboard -->
+  <h2 class="sec"><span class="sec-num">§2</span> Admin Dashboard — Desktop</h2>
+  <p class="body">Business owner's daily tool. Sticky sidebar navigation. Booking detail opens in a slide-over panel — not a new page.</p>
+
+  <div class="wf-label">wireframe · admin dashboard</div>
+  <div class="wf-grid single">
+    <div>
+      <div class="desktop-frame">
+        <div class="desktop-bar">
+          <div class="desktop-dot" style="background:#ff5f57"></div>
+          <div class="desktop-dot" style="background:#febc2e"></div>
+          <div class="desktop-dot" style="background:#28c840"></div>
+          <div class="desktop-url">clinic.yourdomain.com/admin</div>
+        </div>
+        <div class="desktop-screen">
+          <div class="wf-sidebar-layout">
+            <div class="wf-sidebar-col">
+              <div style="width:24px;height:10px;background:rgba(232,160,32,.4);border-radius:3px;margin-bottom:12px"></div>
+              <div class="wf-sidebar-item active"></div>
+              <div class="wf-sidebar-item"></div>
+              <div class="wf-sidebar-item"></div>
+              <div class="wf-sidebar-item"></div>
+              <div class="wf-sidebar-item"></div>
+            </div>
+            <div class="wf-main-col">
+              <div class="wf-kpi-row">
+                <div class="wf-kpi"><div class="wf-kpi-num">12</div><div class="wf-kpi-lbl">TODAY</div></div>
+                <div class="wf-kpi"><div class="wf-kpi-num">47</div><div class="wf-kpi-lbl">THIS WEEK</div></div>
+                <div class="wf-kpi"><div class="wf-kpi-num" style="color:var(--amber)">3</div><div class="wf-kpi-lbl">PENDING</div></div>
+              </div>
+              <div class="wf-card">
+                <div class="wf-text">UPCOMING BOOKINGS</div>
+                <div class="wf-table-hdr"><div></div><div></div><div></div></div>
+                <div class="wf-table-row"><div></div><div></div><div></div></div>
+                <div class="wf-table-row"><div></div><div></div><div></div></div>
+                <div class="wf-table-row"><div></div><div></div><div style="background:var(--green);opacity:.5"></div></div>
+                <div class="wf-table-row"><div></div><div></div><div></div></div>
+              </div>
+            </div>
+            <!-- Slide-over panel -->
+            <div style="width:90px;background:var(--navy3);border-left:1px solid var(--border);padding:8px">
+              <div class="wf-text">BOOKING DETAIL</div>
+              <div class="wf-block h6 w80" style="margin-bottom:5px"></div>
+              <div class="wf-block h6 w60" style="margin-bottom:10px"></div>
+              <div class="wf-block h14 green full" style="border-radius:3px;margin-bottom:4px"></div>
+              <div class="wf-block h14" style="border-radius:3px;background:rgba(248,81,73,.2)"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="wf-caption">Admin dashboard — sticky sidebar + slide-over panel</div>
+    </div>
+  </div>
+
+  <!-- WIREFRAME: Booking Step Form -->
+  <h2 class="sec"><span class="sec-num">§3</span> Customer Details Form</h2>
+  <div class="wf-label">wireframe · booking form</div>
+  <div class="wf-grid" style="grid-template-columns:1fr 1fr">
+    <div>
+      <div class="phone-frame">
+        <div class="phone-screen">
+          <div style="padding:8px 6px">
+            <div class="wf-text">YOUR DETAILS</div>
+            <div class="wf-block h6 w40" style="margin-bottom:3px"></div>
+            <div class="wf-block h30 full" style="border-radius:5px;margin-bottom:8px;background:var(--navy3);border:1px solid var(--border)"></div>
+            <div class="wf-block h6 w40" style="margin-bottom:3px"></div>
+            <div class="wf-block h30 full" style="border-radius:5px;margin-bottom:8px;background:var(--navy3);border:1px solid var(--border)"></div>
+            <div style="display:flex;align-items:center;gap:4px;margin-bottom:3px">
+              <div class="wf-block h6 w40" style="margin:0"></div>
+              <div class="wf-block h5 w20" style="margin:0;background:var(--text3);border-radius:2px;opacity:.5"></div>
+            </div>
+            <div class="wf-block h30 full" style="border-radius:5px;margin-bottom:8px;background:var(--navy3);border:1px solid var(--border)"></div>
+            <div class="wf-block h6 w50" style="margin-bottom:3px"></div>
+            <div class="wf-block h40 full" style="border-radius:5px;margin-bottom:10px;background:var(--navy3);border:1px solid var(--border)"></div>
+            <div class="wf-block h30 amber full" style="border-radius:5px"></div>
+          </div>
+        </div>
+      </div>
+      <div class="wf-caption">Single column · large inputs · optional fields labelled clearly</div>
+    </div>
+    <div style="padding:16px 0">
+      <h3 class="subsec">Design rules for this form</h3>
+      <div class="card"><div class="card-title">Single column only</div><div class="card-sub">Mobile is the primary device. Multi-column forms on mobile cause mis-taps and confusion.</div></div>
+      <div class="card"><div class="card-title">No asterisks for required</div><div class="card-sub">Optional fields are labelled "(optional)" explicitly. Required fields are the default — no visual noise needed.</div></div>
+      <div class="card"><div class="card-title">Inline validation on blur</div><div class="card-sub">Errors appear below each field when user leaves it — not on submit. Prevents the "submit and hunt for errors" frustration.</div></div>
+      <div class="card"><div class="card-title">Each step is a real URL</div><div class="card-sub">Browser back button works. Customers frequently go back to change their service or time — this must work correctly.</div></div>
+    </div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">§4</span> Colour System</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Token</th><th>Hex</th><th>Usage</th></tr></thead>
+      <tbody>
+        <tr><td><code style="font-family:var(--fm);font-size:11px">--brand-primary</code></td><td>#4F46E5</td><td>CTA buttons, active nav, slot selection — tenant-overridable</td></tr>
+        <tr><td><code style="font-family:var(--fm);font-size:11px">--surface-raised</code></td><td>#F7F9FC</td><td>Page background, sidebar background</td></tr>
+        <tr><td><code style="font-family:var(--fm);font-size:11px">--success</code></td><td>#059669</td><td>Confirmed status badge</td></tr>
+        <tr><td><code style="font-family:var(--fm);font-size:11px">--warning</code></td><td>#D97706</td><td>Pending status badge</td></tr>
+        <tr><td><code style="font-family:var(--fm);font-size:11px">--danger</code></td><td>#DC2626</td><td>Cancelled, delete actions, error states</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     05 SCHEMA + PLAN
+════════════════════════════════════════════════ -->
+<div class="page" id="page-plan">
+  <div class="eyebrow">05 — schema & build plan<div class="eyebrow-line"></div></div>
+  <h1 class="page-title">The schema.<br><em>The build order.</em></h1>
+  <p class="page-sub">Authoritative Prisma schema with every field explained. Day-by-day build plan with honest time estimates.</p>
+
+  <div class="callout warn">
+    <div class="callout-icon">⚠</div>
+    <div class="callout-body">
+      <div class="callout-title">Honest time estimate <span class="badge-fix">WEAKNESS FIXED</span></div>
+      <div class="callout-text">
+        Original: 56 hours (28 days). Actual realistic estimate:
+        <ul>
+          <li>Backend (auth, API, availability): 25–35 hrs</li>
+          <li>Frontend (Next.js, booking flow, dashboard): 25–35 hrs</li>
+          <li>Emails + deploy + DNS: 6–10 hrs</li>
+          <li><strong>Bug fixing and integration issues: 10–20 hrs</strong></li>
+          <li><strong>Realistic total: 70–100 hrs = 35–50 days at 2hr/day</strong></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="subsec">Hour budget breakdown</h3>
+  <div style="margin:16px 0 28px">
+    <div class="budget-row"><span class="budget-label">Backend (auth + API)</span><div class="budget-bg"><div class="budget-fill" style="width:30%"></div></div><span class="budget-val">30 hrs</span></div>
+    <div class="budget-row"><span class="budget-label">Frontend (Next.js)</span><div class="budget-bg"><div class="budget-fill" style="width:30%"></div></div><span class="budget-val">30 hrs</span></div>
+    <div class="budget-row"><span class="budget-label">Bug fixing / integration</span><div class="budget-bg"><div class="budget-fill" style="width:15%;background:var(--red)"></div></div><span class="budget-val" style="color:var(--red)">15 hrs</span></div>
+    <div class="budget-row"><span class="budget-label">Emails + deploy</span><div class="budget-bg"><div class="budget-fill" style="width:8%"></div></div><span class="budget-val">8 hrs</span></div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">§1</span> Database Schema</h2>
+  <div class="schema">
+    <div class="schema-head"><span class="schema-tag">model</span> Tenant</div>
+    <div class="schema">
+<pre>id           String    <span class="c">// cuid() — internal identifier</span>
+name         String    <span class="c">// "Dr. Anita's Clinic"</span>
+slug         String    <span class="c">// @unique → dr-anita.yourdomain.com</span>
+logoUrl      String?
+primaryColor String    <span class="c">// @default("#4F46E5") — tenant-overridable</span>
+plan         Plan      <span class="c">// FREE | PRO</span>
+isActive     Boolean   <span class="c">// Super-admin can deactivate</span></pre>
+    </div>
+  </div>
+  <div class="schema">
+    <div class="schema-head"><span class="schema-tag">model</span> Booking</div>
+    <div class="schema">
+<pre>id              String        <span class="c">// cuid()</span>
+tenantId        String        <span class="c">// FK + RLS policy key</span>
+serviceId       String
+customerName    String
+customerEmail   String
+customerPhone   String?
+startsAt        DateTime      <span class="c">// UTC always — never store local time</span>
+endsAt          DateTime      <span class="c">// = startsAt + service.duration</span>
+status          BookingStatus <span class="c">// PENDING|CONFIRMED|CANCELLED|COMPLETED|NO_SHOW</span>
+cancelToken     String        <span class="c">// @unique @default(cuid()) — email cancel link</span>
+adminNotes      String?       <span class="c">// Internal only</span>
+reminderSentAt  DateTime?     <span class="c">// Null = reminder not yet sent (cron uses this)</span>
+
+<span class="c">// Indexes — every query pattern accounted for</span>
+@@index([tenantId, startsAt])   <span class="c">// primary: bookings by date</span>
+@@index([tenantId, status])     <span class="c">// filtered views</span>
+@@index([cancelToken])          <span class="c">// email cancel link lookup</span>
+@@index([reminderSentAt])       <span class="c">// cron finds bookings needing reminder</span></pre>
+    </div>
+  </div>
+  <div class="schema">
+    <div class="schema-head"><span class="schema-tag">model</span> Schedule</div>
+    <div class="schema">
+<pre>timezone     String   <span class="c">// @default("Asia/Kolkata")</span>
+workingDays  Json     <span class="c">// {mon:T, tue:T, wed:T, thu:T, fri:T, sat:T, sun:F}</span>
+workStart    String   <span class="c">// "09:00" — HH:MM 24hr in tenant timezone</span>
+workEnd      String   <span class="c">// "18:00"</span>
+slotInterval Int      <span class="c">// minutes between slot starts. @default(30)</span>
+breakTimes   Json     <span class="c">// [{start:"13:00", end:"14:00"}]</span>
+bufferTime   Int      <span class="c">// gap after each booking. @default(0)</span></pre>
+    </div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">§2</span> Day-by-Day Build Plan</h2>
+  <div class="callout info">
+    <div class="callout-icon">📌</div>
+    <div class="callout-body">
+      <div class="callout-title">Rule: every session ends with something that runs</div>
+      <div class="callout-text">Not "I wrote some files." The code executes without crashing. Commit every session. If stuck &gt;30 min — write the question down, move on.</div>
+    </div>
+  </div>
+
+  <div class="week-block">
+    <div class="week-hdr"><h3>Week 1</h3><span class="week-pill">Foundation</span></div>
+    <table class="day-table">
+      <thead><tr><th>Day</th><th>Hrs</th><th>Deliverable</th><th>Done when</th></tr></thead>
+      <tbody>
+        <tr><td class="day-num">1</td><td class="day-hrs">2h</td><td class="day-task">Monorepo: pnpm workspaces, apps/web (Next.js), apps/api (Express), packages/db. All packages install.</td><td class="day-done">pnpm dev starts both apps</td></tr>
+        <tr><td class="day-num">2</td><td class="day-hrs">2h</td><td class="day-task">Docker Compose Postgres. Prisma schema created. prisma migrate dev runs. Tables visible in Studio.</td><td class="day-done">Prisma Studio opens, tables empty</td></tr>
+        <tr><td class="day-num">3</td><td class="day-hrs">2h</td><td class="day-task">RLS script applied. Seed: 2 tenants, 1 owner, 3 services each. Cross-tenant isolation verified.</td><td class="day-done">SELECT returns 0 cross-tenant rows</td></tr>
+        <tr><td class="day-num">4</td><td class="day-hrs">2h</td><td class="day-task">Auth routes: POST /auth/register, /auth/login (JWT), /auth/refresh (rotates token). bcrypt hashing.</td><td class="day-done">curl /auth/login returns valid JWT</td></tr>
+        <tr><td class="day-num">5</td><td class="day-hrs">2h</td><td class="day-task">Auth middleware: verify JWT, set req.tenantId, set Postgres RLS session variable. Apply to /admin routes.</td><td class="day-done">Protected route: 401 without token</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="week-block">
+    <div class="week-hdr"><h3>Week 2</h3><span class="week-pill">Booking Engine</span></div>
+    <table class="day-table">
+      <thead><tr><th>Day</th><th>Hrs</th><th>Deliverable</th><th>Done when</th></tr></thead>
+      <tbody>
+        <tr><td class="day-num">6</td><td class="day-hrs">2h</td><td class="day-task">Schedule CRUD. Default auto-created on registration.</td><td class="day-done">Update schedule, GET returns new values</td></tr>
+        <tr><td class="day-num">7</td><td class="day-hrs">2h</td><td class="day-task">Service CRUD with soft delete (isActive).</td><td class="day-done">Create 3 services, list returns all 3</td></tr>
+        <tr><td class="day-num">8</td><td class="day-hrs">2h</td><td class="day-task">Availability engine function + Jest unit tests. Cases: closed day, fully booked, breaks, past, duration overlap.</td><td class="day-done">All test cases pass</td></tr>
+        <tr><td class="day-num">9</td><td class="day-hrs">2h</td><td class="day-task">Public availability endpoint returns correct slot array.</td><td class="day-done">curl returns slots for tomorrow</td></tr>
+        <tr><td class="day-num">10</td><td class="day-hrs">2h</td><td class="day-task">Booking creation with SERIALIZABLE TX + SELECT FOR UPDATE. Confirmation email via Resend.</td><td class="day-done">Create booking, receive email</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="week-block">
+    <div class="week-hdr"><h3>Week 3</h3><span class="week-pill">Frontend</span></div>
+    <table class="day-table">
+      <thead><tr><th>Day</th><th>Hrs</th><th>Deliverable</th><th>Done when</th></tr></thead>
+      <tbody>
+        <tr><td class="day-num">11</td><td class="day-hrs">2h</td><td class="day-task">Admin booking endpoints: GET with filters, PATCH status, email triggers.</td><td class="day-done">Confirm via API, email sent</td></tr>
+        <tr><td class="day-num">12</td><td class="day-hrs">2h</td><td class="day-task">Next.js subdomain middleware. /etc/hosts for two local subdomains.</td><td class="day-done">Two tenants at two subdomains</td></tr>
+        <tr><td class="day-num">13</td><td class="day-hrs">2h</td><td class="day-task">Public booking flow UI: service → date → slots. Mobile-first. Live API.</td><td class="day-done">Complete booking in browser</td></tr>
+        <tr><td class="day-num">14</td><td class="day-hrs">2h</td><td class="day-task">Customer form + confirmation. Cancel via email link.</td><td class="day-done">Cancel via link, status → CANCELLED</td></tr>
+        <tr><td class="day-num">15</td><td class="day-hrs">2h</td><td class="day-task">Admin login, dashboard home, silent token refresh on 401, KPI cards.</td><td class="day-done">Log in, see today's bookings</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="week-block">
+    <div class="week-hdr"><h3>Week 4+</h3><span class="week-pill">Polish + Deploy</span></div>
+    <table class="day-table">
+      <thead><tr><th>Day</th><th>Hrs</th><th>Deliverable</th><th>Done when</th></tr></thead>
+      <tbody>
+        <tr><td class="day-num">16</td><td class="day-hrs">2h</td><td class="day-task">Admin booking UI: list + filters + slide-over + optimistic updates.</td><td class="day-done">Confirm/cancel from UI</td></tr>
+        <tr><td class="day-num">17</td><td class="day-hrs">2h</td><td class="day-task">Services + schedule management UI.</td><td class="day-done">Add service, change schedule from UI</td></tr>
+        <tr><td class="day-num">18</td><td class="day-hrs">2h</td><td class="day-task">React Email templates, all 5 types. .ics attachment on confirmation.</td><td class="day-done">All 5 emails in Gmail</td></tr>
+        <tr><td class="day-num">19</td><td class="day-hrs">2h</td><td class="day-task">Staff invite. Role-restricted dashboard. Branding settings.</td><td class="day-done">Staff login with restricted access</td></tr>
+        <tr><td class="day-num">20+</td><td class="day-hrs">10h+</td><td class="day-task" style="color:var(--amber)">Buffer: bug fixing, integration issues, load test (50 concurrent users, 0 duplicate bookings).</td><td class="day-done">Pass concurrent booking test</td></tr>
+        <tr><td class="day-num">—</td><td class="day-hrs">3–5h</td><td class="day-task">Deploy: wildcard DNS, Vercel, Railway, GitHub Actions CI/CD. Seed production.</td><td class="day-done">Live at yourdomain.com</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     FIXES
+════════════════════════════════════════════════ -->
+<div class="page" id="page-fixes">
+  <div class="eyebrow">all fixes &amp; decisions — v1.3<div class="eyebrow-line"></div></div>
+  <h1 class="page-title">What was<br><em>wrong.</em></h1>
+  <p class="page-sub">Eight documented weaknesses and architectural decisions. Each one fixed directly — not as footnotes.</p>
+
+  <h2 class="sec"><span class="sec-num">W1</span> "No double-bookings ever" — too strong <span class="badge-fix">FIXED</span></h2>
+  <div class="compare">
+    <div class="compare-col">
+      <div class="compare-hdr">✗ Original (wrong)</div>
+      <div class="compare-row">"No double-bookings ever" — unprovable claim</div>
+      <div class="compare-row">SELECT FOR UPDATE mentioned only in implementation notes</div>
+      <div class="compare-row">No transaction isolation level specified</div>
+      <div class="compare-row">No load test requirement</div>
+    </div>
+    <div class="compare-col">
+      <div class="compare-hdr">✓ Fixed (accurate)</div>
+      <div class="compare-row">"Prevention using SELECT FOR UPDATE + SERIALIZABLE TX"</div>
+      <div class="compare-row">Full code example in TRD with isolationLevel explicitly set</div>
+      <div class="compare-row">SERIALIZABLE isolation level required and documented</div>
+      <div class="compare-row">50-user load test required before claiming production-ready</div>
+    </div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">W2</span> 56-hour estimate too optimistic <span class="badge-fix">FIXED</span></h2>
+  <div class="compare">
+    <div class="compare-col">
+      <div class="compare-hdr">✗ Original (optimistic)</div>
+      <div class="compare-row">56 hours = 28 days at 2hr/day</div>
+      <div class="compare-row">Assumed clean runs every session</div>
+      <div class="compare-row">No buffer for Prisma migration issues</div>
+      <div class="compare-row">No buffer for DNS propagation (up to 48hrs)</div>
+    </div>
+    <div class="compare-col">
+      <div class="compare-hdr">✓ Fixed (honest)</div>
+      <div class="compare-row">70–100 hours = 35–50 days at 2hr/day</div>
+      <div class="compare-row">10–20hr explicit bug fixing buffer in plan</div>
+      <div class="compare-row">Day 20+ labelled buffer, not a specific deliverable</div>
+      <div class="compare-row">Deployment day budgeted separately at 3–5hr</div>
+    </div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">W3</span> Missing SaaS infrastructure <span class="badge-fix">DOCUMENTED</span></h2>
+  <p class="body">Not forgotten — deliberately deferred because this is a portfolio project. Documented honestly with a V2 path for each item.</p>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Missing Concern</th><th>Why Deferred</th><th>V2 Approach</th></tr></thead>
+      <tbody>
+        <tr><td>Billing / subscriptions</td><td>No paying customers yet</td><td>Razorpay Subscriptions API</td></tr>
+        <tr><td>Monitoring / alerting</td><td>Railway uptime sufficient for portfolio</td><td>Sentry + Railway metrics</td></tr>
+        <tr><td>Database backups</td><td>Railway free has no auto-backups</td><td>pg_dump cron on paid tier</td></tr>
+        <tr><td>Support workflow</td><td>Email sufficient at this scale</td><td>Crisp or Intercom embed</td></tr>
+        <tr><td>GDPR / data export</td><td>Not targeting EU in V1</td><td>Data export endpoint before EU clients</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">W4</span> Wrong target client</h2>
+  <div class="callout success">
+    <div class="callout-icon">↗</div>
+    <div class="callout-body">
+      <div class="callout-title">Start with salons, trainers, tutors — not clinics</div>
+      <div class="callout-text">The build is identical regardless of client type. The pivot is in the pitch.
+        <ul>
+          <li>Personal trainers, yoga studios, tutors, photographers, consultants</li>
+          <li>Easier to acquire, simpler workflows, faster feedback</li>
+          <li>Fewer legal / privacy concerns than healthcare</li>
+          <li>Clinics: pursue after 2–3 non-healthcare clients are stable</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">W5</span> Platform scope clarified <span class="badge-fix">v1.2</span></h2>
+  <div class="compare">
+    <div class="compare-col">
+      <div class="compare-hdr">✗ Ambiguous (before)</div>
+      <div class="compare-row">Mobile app listed as "V2" — implied it was planned</div>
+      <div class="compare-row">No explicit statement about platform scope</div>
+      <div class="compare-row">Could confuse clients expecting an app store listing</div>
+    </div>
+    <div class="compare-col">
+      <div class="compare-hdr">✓ Clear (now)</div>
+      <div class="compare-row">All three projects are <strong>web-only</strong>. No native app.</div>
+      <div class="compare-row">Public booking flow is mobile-responsive (375px browser)</div>
+      <div class="compare-row">Native app explicitly marked OUT OF SCOPE in PRD table</div>
+    </div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">W6</span> NextAuth architectural contradiction <span class="badge-fix">v1.3</span></h2>
+  <div class="compare">
+    <div class="compare-col">
+      <div class="compare-hdr">✗ Before (contradictory)</div>
+      <div class="compare-row">TRD listed NextAuth + custom Express JWT simultaneously</div>
+      <div class="compare-row">Two auth systems that don't talk to each other</div>
+      <div class="compare-row">NextAuth is Next.js-native — can't set Postgres RLS context</div>
+      <div class="compare-row">NextAuth subdomain cookie edge case — known blocker</div>
+    </div>
+    <div class="compare-col">
+      <div class="compare-hdr">✓ After (resolved)</div>
+      <div class="compare-row">NextAuth removed entirely from tech stack</div>
+      <div class="compare-row">Custom JWT on Express only — full control, no conflicts</div>
+      <div class="compare-row">AuthContext in React state + Axios interceptor for silent refresh</div>
+      <div class="compare-row">RLS context set in Express auth middleware on every request</div>
+    </div>
+  </div>
+  <div class="callout info">
+    <div class="callout-icon">ℹ</div>
+    <div class="callout-body">
+      <div class="callout-title">Why Express must own auth</div>
+      <div class="callout-text">The auth middleware must call <code style="font-family:var(--fm);font-size:12px">set_config('app.tenant_id', tenantId, true)</code> before every database query. This sets the Postgres session variable that activates RLS. NextAuth runs in Next.js — it cannot reach the Express middleware chain. Therefore Express must own auth entirely. Full implementation in §07 Auth Architecture.</div>
+    </div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">W7</span> Subdomain routing replaced with path-based <span class="badge-fix">v1.3</span></h2>
+  <div class="compare">
+    <div class="compare-col">
+      <div class="compare-hdr">✗ Before (broken for this deployment)</div>
+      <div class="compare-row">clinic.booking.virajdomadia.com = 3 levels deep</div>
+      <div class="compare-row">Wildcard SSL only covers one level — Vercel free tier</div>
+      <div class="compare-row">middleware.ts required for subdomain detection</div>
+      <div class="compare-row">/etc/hosts entries needed for local development</div>
+    </div>
+    <div class="compare-col">
+      <div class="compare-hdr">✓ After (clean)</div>
+      <div class="compare-row">booking.virajdomadia.com/book/[slug] — one level</div>
+      <div class="compare-row">Single SSL cert, Vercel issues it automatically</div>
+      <div class="compare-row">No middleware.ts — App Router [slug] folder handles it</div>
+      <div class="compare-row">localhost:3000/book/demo-clinic works with zero setup</div>
+    </div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">W8</span> Turborepo removed <span class="badge-fix">v1.3</span></h2>
+  <div class="compare">
+    <div class="compare-col">
+      <div class="compare-hdr">✗ Before (unnecessary complexity)</div>
+      <div class="compare-row">turbo.json in monorepo — never configured a useful pipeline</div>
+      <div class="compare-row">Build pipeline orchestration for 3 packages</div>
+      <div class="compare-row">Adds config surface with zero practical benefit</div>
+    </div>
+    <div class="compare-col">
+      <div class="compare-hdr">✓ After (simple)</div>
+      <div class="compare-row">pnpm workspaces only — already handles package linking</div>
+      <div class="compare-row">Root package.json scripts with concurrently</div>
+      <div class="compare-row">One less thing to debug on Day 1</div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     06 PRE-DEV SETUP
+════════════════════════════════════════════════ -->
+<div class="page" id="page-predev">
+  <div class="eyebrow">06 — pre-development setup<div class="eyebrow-line"></div></div>
+  <h1 class="page-title">Before you<br><em>write code.</em></h1>
+  <p class="page-sub">Five blockers that will cost 10–20 hours mid-build if not resolved first. Complete all five before Day 1.</p>
+
+  <h2 class="sec"><span class="sec-num">B1</span> Local Environment</h2>
+  <p class="body">Run this in your terminal. All lines must print OK before proceeding.</p>
+<pre>
+node --version   <span class="c">&amp;&amp; echo 'Node OK'   || echo 'Node MISSING — install 18.x or 20.x LTS'</span>
+pnpm --version   <span class="c">&amp;&amp; echo 'pnpm OK'   || echo 'pnpm MISSING — npm install -g pnpm'</span>
+docker --version <span class="c">&amp;&amp; echo 'Docker OK' || echo 'Docker MISSING — install Docker Desktop'</span>
+git --version    <span class="c">&amp;&amp; echo 'Git OK'    || echo 'Git MISSING'</span></pre>
+
+  <p class="body" style="margin-top:12px"><strong>External accounts — create before Day 1:</strong></p>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Service</th><th>What to do now</th><th>Why it can't wait</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Resend</strong></td><td>Create account → add domain → verify DNS → send one test email</td><td>DNS verification takes up to 24hrs. Don't hit this on Day 18.</td></tr>
+        <tr><td><strong>Railway</strong></td><td>Create account → new project → add Postgres plugin → confirm free tier available</td><td>Confirm free tier works in your region before building against it.</td></tr>
+        <tr><td><strong>Vercel</strong></td><td>Create account → link GitHub → deploy a blank Next.js app to confirm it works</td><td>Domain verification for booking.virajdomadia.com needs setup time.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">B2</span> Turborepo — Removed</h2>
+  <div class="callout success">
+    <div class="callout-icon">✓</div>
+    <div class="callout-body">
+      <div class="callout-title">Decision: pnpm workspaces only. No turbo.json.</div>
+      <div class="callout-text">Turborepo adds build pipeline config with zero practical benefit at this scale. Use plain pnpm workspaces + concurrently in root package.json scripts.</div>
+    </div>
+  </div>
+<pre>
+<span class="c"># pnpm-workspace.yaml</span>
+<span class="fn">packages</span>:
+  - <span class="s">'apps/*'</span>
+  - <span class="s">'packages/*'</span>
+
+<span class="c"># root package.json scripts</span>
+<span class="s">"dev"</span>:     <span class="s">"concurrently \"pnpm dev:api\" \"pnpm dev:web\""</span>
+<span class="s">"dev:api"</span>: <span class="s">"pnpm --filter api dev"</span>
+<span class="s">"dev:web"</span>: <span class="s">"pnpm --filter web dev"</span></pre>
+
+  <h2 class="sec"><span class="sec-num">B3</span> Auth — No NextAuth</h2>
+  <div class="callout warn">
+    <div class="callout-icon">⚠</div>
+    <div class="callout-body">
+      <div class="callout-title">NextAuth removed. Custom JWT on Express only.</div>
+      <div class="callout-text">See §07 Auth Architecture for full implementation. The short version: Express auth middleware must set the Postgres RLS context variable. NextAuth runs in Next.js and cannot reach Express middleware. Having both creates two auth systems that don't communicate. Remove NextAuth, build custom JWT. Full AuthContext + Axios interceptor pattern documented in §07.</div>
+    </div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">B4</span> Cookie Scope</h2>
+  <p class="body">The refresh token cookie must reach the Express API from the Next.js frontend. In production, scope the cookie to <code style="font-family:var(--fm);font-size:12px">.virajdomadia.com</code>. Locally, no scoping needed.</p>
+<pre>
+res.cookie(<span class="s">'refresh_token'</span>, refreshToken, {
+  httpOnly: <span class="k">true</span>,
+  secure:   process.env.NODE_ENV === <span class="s">'production'</span>,
+  sameSite: <span class="s">'strict'</span>,
+  domain:   process.env.NODE_ENV === <span class="s">'production'</span>
+              ? <span class="s">'.virajdomadia.com'</span>  <span class="c">// all subdomains including api.</span>
+              : undefined,            <span class="c">// localhost — no scoping needed</span>
+  maxAge:   7 * 24 * 60 * 60 * 1000,
+});</pre>
+  <p class="body"><strong>Verify after Day 4:</strong> log in → DevTools → Application → Cookies → refresh_token must show httpOnly checkmark. Run <code style="font-family:var(--fm);font-size:12px">document.cookie</code> in console — refresh_token must NOT appear.</p>
+
+  <h2 class="sec"><span class="sec-num">B5</span> Email Retry — Best-Effort V1</h2>
+  <div class="callout warn">
+    <div class="callout-icon">⚠</div>
+    <div class="callout-body">
+      <div class="callout-title">Decision: best-effort email with visibility. No retry queue in V1.</div>
+      <div class="callout-text">Railway free tier has no cron. No Redis. Adding a job queue is 8–12 hours for zero client-facing value in a portfolio project. V1 approach: wrap all Resend calls in try-catch. On failure: log + set <code style="font-family:var(--fm);font-size:12px">confirmationEmailStatus = 'FAILED'</code> on Booking. Admin dashboard shows a warning badge on failed emails. V2 path: pg-boss (Postgres-based queue, no Redis needed) when a paying client requires reliable delivery.</div>
+    </div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">Readiness Checklist</span></h2>
+  <ul class="checklist" id="cl-predev">
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>node --version prints 18.x or 20.x</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>pnpm --version prints 8.x or later</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>Docker Desktop running — docker ps returns no error</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>Resend account created, domain DNS verified, test email sent successfully</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>Railway account created, Postgres add-on provisioned</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>Vercel account created, linked to GitHub</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>No turbo.json in repo — pnpm workspaces only</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>next-auth NOT in apps/web/package.json</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>confirmationEmailStatus field added to Booking model in schema.prisma</span></li>
+  </ul>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     07 AUTH ARCHITECTURE
+════════════════════════════════════════════════ -->
+<div class="page" id="page-auth">
+  <div class="eyebrow">07 — auth architecture<div class="eyebrow-line"></div></div>
+  <h1 class="page-title">Auth without<br><em>NextAuth.</em></h1>
+  <p class="page-sub">Custom JWT on Express. AuthContext in React. Axios interceptor for silent refresh. No NextAuth — no conflicts.</p>
+
+  <div class="callout info">
+    <div class="callout-icon">ℹ</div>
+    <div class="callout-body">
+      <div class="callout-title">Token strategy</div>
+      <div class="callout-text"><strong>Access token:</strong> JWT, 15-min expiry, stored in React state (memory only, never localStorage). Contains: { userId, tenantId, role }.<br><strong>Refresh token:</strong> opaque UUID, 7-day expiry, stored in httpOnly Secure cookie. Rotated on every use.</div>
+    </div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">§1</span> Express Auth Middleware</h2>
+<pre>
+<span class="c">// apps/api/src/middleware/auth.ts</span>
+<span class="k">export const</span> <span class="fn">authMiddleware</span> = <span class="k">async</span> (req, res, next) => {
+  <span class="k">const</span> token = req.headers.authorization?.split(<span class="s">' '</span>)[1];
+  <span class="k">if</span> (!token) <span class="k">return</span> res.status(401).json({ error: <span class="s">'Unauthorized'</span> });
+  <span class="k">try</span> {
+    <span class="k">const</span> payload = jwt.verify(token, process.env.JWT_SECRET);
+    req.user     = payload;
+    req.tenantId = payload.tenantId;
+    <span class="c">// ← This line activates RLS for every query in this request</span>
+    <span class="k">await</span> prisma.$executeRaw`
+      SELECT set_config(<span class="s">'app.tenant_id'</span>, ${payload.tenantId}, true)
+    `;
+    next();
+  } <span class="k">catch</span> (e) {
+    <span class="k">return</span> res.status(401).json({ error: <span class="s">'Invalid or expired token'</span> });
+  }
+};</pre>
+
+  <h2 class="sec"><span class="sec-num">§2</span> AuthContext — React State</h2>
+<pre>
+<span class="c">// apps/web/src/context/auth.tsx</span>
+<span class="k">export function</span> <span class="fn">AuthProvider</span>({ children }) {
+  <span class="k">const</span> [accessToken, setAccessToken] = useState&lt;string | null&gt;(null);
+  <span class="k">const</span> [user, setUser] = useState&lt;User | null&gt;(null);
+
+  <span class="c">// On mount: try silent refresh — keeps user logged in after page reload</span>
+  useEffect(() => { silentRefresh().catch(() => {}); }, []);
+
+  <span class="k">const</span> <span class="fn">silentRefresh</span> = <span class="k">async</span> () => {
+    <span class="k">const</span> res = <span class="k">await</span> fetch(<span class="s">`${API_URL}/auth/refresh`</span>,
+      { method: <span class="s">'POST'</span>, credentials: <span class="s">'include'</span> });
+    <span class="k">if</span> (res.ok) {
+      <span class="k">const</span> { accessToken, user } = <span class="k">await</span> res.json();
+      setAccessToken(accessToken);
+      setUser(user);
+    }
+  };
+}</pre>
+
+  <h2 class="sec"><span class="sec-num">§3</span> Axios Interceptor — Silent Refresh on 401</h2>
+<pre>
+<span class="c">// apps/web/src/lib/api.ts</span>
+<span class="k">const</span> api = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_API_URL,
+  withCredentials: <span class="k">true</span>, <span class="c">// sends httpOnly cookie on every request</span>
+});
+
+api.interceptors.response.use(res => res, <span class="k">async</span> error => {
+  <span class="k">if</span> (error.response?.status === 401 &amp;&amp; !error.config._retry) {
+    error.config._retry = <span class="k">true</span>;
+    <span class="k">const</span> { data } = <span class="k">await</span> axios.post(<span class="s">'/auth/refresh'</span>,
+                                          {}, { withCredentials: <span class="k">true</span> });
+    setAccessToken(data.accessToken); <span class="c">// update React state</span>
+    error.config.headers.Authorization = <span class="s">`Bearer ${data.accessToken}`</span>;
+    <span class="k">return</span> api(error.config); <span class="c">// retry original request</span>
+  }
+  <span class="k">if</span> (error.response?.status === 401) router.push(<span class="s">'/admin/login'</span>);
+  <span class="k">return</span> Promise.reject(error);
+});</pre>
+
+  <h2 class="sec"><span class="sec-num">§4</span> Remove These Dependencies</h2>
+  <div class="callout danger">
+    <div class="callout-icon">✗</div>
+    <div class="callout-body">
+      <div class="callout-title">Do not install or reference any of these</div>
+      <div class="callout-text">
+        <code style="font-family:var(--fm);font-size:12px">next-auth</code> · <code style="font-family:var(--fm);font-size:12px">@auth/prisma-adapter</code> · <code style="font-family:var(--fm);font-size:12px">NEXTAUTH_URL</code> env var · <code style="font-family:var(--fm);font-size:12px">NEXTAUTH_SECRET</code> env var · <code style="font-family:var(--fm);font-size:12px">apps/web/src/app/api/auth/[...nextauth]/route.ts</code>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">§5</span> Environment Variables (correct set)</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Variable</th><th>Where</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td><code style="font-family:var(--fm);font-size:11px">JWT_SECRET</code></td><td>api</td><td>openssl rand -hex 32</td></tr>
+        <tr><td><code style="font-family:var(--fm);font-size:11px">JWT_REFRESH_SECRET</code></td><td>api</td><td>openssl rand -hex 32 (different from above)</td></tr>
+        <tr><td><code style="font-family:var(--fm);font-size:11px">DATABASE_URL</code></td><td>api + db</td><td>Postgres connection string</td></tr>
+        <tr><td><code style="font-family:var(--fm);font-size:11px">RESEND_API_KEY</code></td><td>api</td><td>From resend.com dashboard</td></tr>
+        <tr><td><code style="font-family:var(--fm);font-size:11px">FRONTEND_URL</code></td><td>api</td><td>https://booking.virajdomadia.com (CORS origin)</td></tr>
+        <tr><td><code style="font-family:var(--fm);font-size:11px">ROOT_DOMAIN</code></td><td>api + web</td><td>virajdomadia.com</td></tr>
+        <tr><td><code style="font-family:var(--fm);font-size:11px">NEXT_PUBLIC_API_URL</code></td><td>web</td><td>https://api.railway.app (prod) / http://localhost:4000 (dev)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     08 DEPLOYMENT & ROUTING
+════════════════════════════════════════════════ -->
+<div class="page" id="page-deploy">
+  <div class="eyebrow">08 — deployment &amp; routing<div class="eyebrow-line"></div></div>
+  <h1 class="page-title">Path-based<br><em>routing.</em></h1>
+  <p class="page-sub">booking.virajdomadia.com — path-based tenant routing. No middleware.ts. No wildcard SSL. No /etc/hosts. Vercel free tier, works out of the box.</p>
+
+  <h2 class="sec"><span class="sec-num">§1</span> URL Structure</h2>
+<pre>
+booking.virajdomadia.com                        <span class="c">← landing page</span>
+booking.virajdomadia.com/book/[slug]            <span class="c">← tenant booking flow</span>
+booking.virajdomadia.com/book/[slug]/admin      <span class="c">← admin dashboard</span>
+booking.virajdomadia.com/cancel/[token]         <span class="c">← customer cancel link</span>
+booking.virajdomadia.com/superadmin             <span class="c">← operator panel</span></pre>
+
+  <h2 class="sec"><span class="sec-num">§2</span> App Router Folder Structure</h2>
+  <p class="body">No <code style="font-family:var(--fm);font-size:12px">middleware.ts</code> needed. Delete it if it exists. The <code style="font-family:var(--fm);font-size:12px">[slug]</code> param is available in every page component via <code style="font-family:var(--fm);font-size:12px">params.slug</code>.</p>
+<pre>
+apps/web/src/app/
+  page.tsx                              <span class="c">← landing page</span>
+  book/
+    [slug]/
+      page.tsx                          <span class="c">← service list</span>
+      [serviceId]/
+        date/page.tsx                   <span class="c">← date picker</span>
+        slots/page.tsx                  <span class="c">← time slot picker</span>
+        details/page.tsx                <span class="c">← customer details form</span>
+        confirm/page.tsx                <span class="c">← confirmation</span>
+      admin/
+        page.tsx                        <span class="c">← dashboard home</span>
+        bookings/page.tsx
+        services/page.tsx
+        schedule/page.tsx
+        staff/page.tsx
+        settings/page.tsx
+        login/page.tsx
+  cancel/
+    [token]/page.tsx                    <span class="c">← customer cancel via email link</span>
+  superadmin/
+    page.tsx
+    login/page.tsx</pre>
+
+  <h2 class="sec"><span class="sec-num">§3</span> Reading the slug</h2>
+<pre>
+<span class="c">// apps/web/src/app/book/[slug]/page.tsx</span>
+<span class="k">export default function</span> <span class="fn">BookingPage</span>({
+  params
+}: {
+  params: { slug: string }
+}) {
+  <span class="k">const</span> { slug } = params; <span class="c">// "demo-clinic", "salon", etc.</span>
+  <span class="c">// slug passes straight to every API call — no transformation needed</span>
+  <span class="k">const</span> services = <span class="k">await</span> api.get(<span class="s">`/public/${slug}/services`</span>);
+}</pre>
+
+  <h2 class="sec"><span class="sec-num">§4</span> Vercel DNS Config</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Step</th><th>Where</th><th>Action</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Vercel dashboard</td><td>Import GitHub repo → set root directory to apps/web → deploy</td></tr>
+        <tr><td>2</td><td>Vercel project settings</td><td>Domains → Add custom domain → booking.virajdomadia.com</td></tr>
+        <tr><td>3</td><td>Your DNS provider</td><td>Add CNAME record: Name=booking, Value=cname.vercel-dns.com</td></tr>
+        <tr><td>4</td><td>Wait</td><td>DNS propagation: usually &lt;1hr on Cloudflare, up to 48hrs elsewhere</td></tr>
+        <tr><td>5</td><td>Verify</td><td>https://booking.virajdomadia.com loads — no SSL warning</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">§5</span> Local Development</h2>
+  <p class="body">No /etc/hosts needed. Path-based routing works on plain localhost.</p>
+<pre>
+http://localhost:3000/book/demo-clinic       <span class="c">← tenant 1 booking</span>
+http://localhost:3000/book/demo-clinic/admin <span class="c">← tenant 1 admin</span>
+http://localhost:3000/book/demo-salon        <span class="c">← tenant 2 booking</span></pre>
+
+  <h2 class="sec"><span class="sec-num">§6</span> GitHub Actions CI/CD</h2>
+<pre>
+<span class="c"># .github/workflows/deploy.yml</span>
+<span class="fn">on</span>: { push: { branches: [main] } }
+<span class="fn">jobs</span>:
+  deploy:
+    steps:
+      - <span class="fn">name</span>: Install
+        <span class="fn">run</span>: pnpm install
+      - <span class="fn">name</span>: Type check
+        <span class="fn">run</span>: pnpm --filter web tsc --noEmit
+      - <span class="fn">name</span>: Run tests
+        <span class="fn">run</span>: pnpm --filter db test
+      - <span class="fn">name</span>: Migrate production DB
+        <span class="fn">run</span>: pnpm --filter db migrate:deploy
+      - <span class="fn">name</span>: Apply RLS
+        <span class="fn">run</span>: psql $DATABASE_URL &lt; packages/db/scripts/rls.sql
+      - <span class="fn">name</span>: Deploy to Railway + Vercel
+        <span class="c">        # via Railway CLI and Vercel CLI with secrets</span></pre>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     09 FEATURE BUILD GUIDE
+════════════════════════════════════════════════ -->
+<div class="page" id="page-features">
+  <div class="eyebrow">09 — feature build guide<div class="eyebrow-line"></div></div>
+  <h1 class="page-title">12 features.<br><em>Build order.</em></h1>
+  <p class="page-sub">Each feature is a vertical slice — DB, API, and frontend together. Build in order. Every feature has a DONE WHEN section — do not move on until all items pass.</p>
+
+  <div class="callout info">
+    <div class="callout-icon">📌</div>
+    <div class="callout-body">
+      <div class="callout-title">Total estimate: 73–87 hours + 10–20hr bug buffer = 83–107 hours</div>
+      <div class="callout-text">F4 (Public Booking Flow) is the largest at 14–18hrs. That's intentional — it's the core product with the most edge cases. Don't rush it.</div>
+    </div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">Overview</span></h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>ID</th><th>Feature</th><th>Est.</th><th>Depends On</th></tr></thead>
+      <tbody>
+        <tr><td><span class="tag tag-b">F0</span></td><td><strong>Project Setup &amp; Infrastructure</strong></td><td>6–8 hrs</td><td>None</td></tr>
+        <tr><td><span class="tag tag-b">F1</span></td><td><strong>Auth — Register, Login, Tokens</strong></td><td>8–10 hrs</td><td>F0</td></tr>
+        <tr><td><span class="tag tag-b">F2</span></td><td>Tenant &amp; Schedule Management</td><td>6–8 hrs</td><td>F1</td></tr>
+        <tr><td><span class="tag tag-b">F3</span></td><td>Service Management</td><td>4–6 hrs</td><td>F1</td></tr>
+        <tr><td><span class="tag tag-g">F4</span></td><td><strong>Public Booking Flow ← core</strong></td><td>14–18 hrs</td><td>F2 + F3</td></tr>
+        <tr><td><span class="tag tag-b">F5</span></td><td>Admin Booking Management</td><td>8–10 hrs</td><td>F4</td></tr>
+        <tr><td><span class="tag tag-b">F6</span></td><td>Email Notifications</td><td>6–8 hrs</td><td>F4 + F5</td></tr>
+        <tr><td><span class="tag tag-b">F7</span></td><td>Customer Cancel via Email Link</td><td>4–5 hrs</td><td>F6</td></tr>
+        <tr><td><span class="tag tag-b">F8</span></td><td>Staff Management</td><td>5–6 hrs</td><td>F1 + F6</td></tr>
+        <tr><td><span class="tag tag-b">F9</span></td><td>24hr Reminder Cron</td><td>2–3 hrs</td><td>F6</td></tr>
+        <tr><td><span class="tag tag-b">F10</span></td><td>Super Admin Panel</td><td>4–5 hrs</td><td>F1</td></tr>
+        <tr><td><span class="tag tag-a">F11</span></td><td><strong>Deploy &amp; Go Live</strong></td><td>6–8 hrs</td><td>All</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">F0</span> Project Setup &amp; Infrastructure</h2>
+  <div class="flow">
+    <div class="flow-item"><div class="flow-spine"><div class="flow-num normal">1</div></div><div class="flow-body"><div class="flow-title">Monorepo scaffolding</div><div class="flow-desc">pnpm workspaces, apps/web (Next.js 14), apps/api (Express), packages/db, packages/types, packages/utils. Root scripts: dev, dev:api, dev:web, db:migrate, db:studio.</div></div></div>
+    <div class="flow-item"><div class="flow-spine"><div class="flow-num normal">2</div></div><div class="flow-body"><div class="flow-title">Docker Compose + Prisma</div><div class="flow-desc">Docker Compose runs Postgres 15 locally. Prisma schema from 05_Schema_ImplPlan (copy verbatim). prisma migrate dev — all 5 tables created.</div></div></div>
+    <div class="flow-item"><div class="flow-spine"><div class="flow-num warn">3</div></div><div class="flow-body flow-warn"><div class="flow-title">RLS script + verification ← do not skip</div><div class="flow-desc">Apply packages/db/scripts/rls.sql to local DB. Seed 2 tenants. Run cross-tenant query: set_config to tenant_a, SELECT COUNT(*) WHERE tenantId = tenant_b → must return 0.</div></div></div>
+    <div class="flow-item"><div class="flow-spine"><div class="flow-num normal">4</div></div><div class="flow-body"><div class="flow-title">Environment variables</div><div class="flow-desc">.env.example documents all variables. .env files created in apps/api and apps/web. JWT secrets generated with openssl rand -hex 32.</div></div></div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">F1</span> Auth — Register, Login, Token Flow</h2>
+  <div class="flow">
+    <div class="flow-item"><div class="flow-spine"><div class="flow-num normal">1</div></div><div class="flow-body"><div class="flow-title">Express auth routes</div><div class="flow-desc">POST /auth/register (Tenant + User + Schedule in transaction). POST /auth/login (JWT + httpOnly cookie). POST /auth/refresh (rotate token). POST /auth/logout.</div></div></div>
+    <div class="flow-item"><div class="flow-spine"><div class="flow-num warn">2</div></div><div class="flow-body flow-warn"><div class="flow-title">Auth middleware — sets RLS context</div><div class="flow-desc">Verify JWT → set req.user and req.tenantId → call set_config('app.tenant_id', tenantId, true) → next(). This is what activates RLS. Applied to all /admin/* routes.</div></div></div>
+    <div class="flow-item"><div class="flow-spine"><div class="flow-num normal">3</div></div><div class="flow-body"><div class="flow-title">AuthContext + Axios interceptors</div><div class="flow-desc">AccessToken in React state. silentRefresh() on mount. Axios request interceptor: attach Bearer token. Response interceptor: on 401, call /auth/refresh, retry. On refresh fail: redirect to login.</div></div></div>
+    <div class="flow-item"><div class="flow-spine"><div class="flow-num normal">4</div></div><div class="flow-body"><div class="flow-title">Admin login page</div><div class="flow-desc">/book/[slug]/admin/login — email + password form. On success: redirect to /book/[slug]/admin. Route guard on all admin pages.</div></div></div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">F4</span> Public Booking Flow ← most critical</h2>
+  <div class="flow">
+    <div class="flow-item"><div class="flow-spine"><div class="flow-num warn">1</div></div><div class="flow-body flow-warn"><div class="flow-title">Availability engine + unit tests FIRST</div><div class="flow-desc">Write getAvailableSlots() in packages/utils. Write 6 Jest unit tests: closed day, fully booked, breaks, past slots, duration overlap, buffer time. All must pass before building the API endpoint.</div></div></div>
+    <div class="flow-item"><div class="flow-spine"><div class="flow-num normal">2</div></div><div class="flow-body"><div class="flow-title">Public API endpoints</div><div class="flow-desc">GET /public/:slug/services (404 if tenant not found). GET /public/:slug/availability (runs engine, returns slots array). POST /public/:slug/bookings (SERIALIZABLE TX + SELECT FOR UPDATE SKIP LOCKED → 409 on conflict).</div></div></div>
+    <div class="flow-item"><div class="flow-spine"><div class="flow-num normal">3</div></div><div class="flow-body"><div class="flow-title">Booking pages — 5 steps</div><div class="flow-desc">/book/[slug] service list → /[serviceId]/date picker → /slots time picker → /details customer form → /confirm. Each step is a real URL. Browser back works. Test on real mobile phone.</div></div></div>
+    <div class="flow-item"><div class="flow-spine"><div class="flow-num warn">4</div></div><div class="flow-body flow-warn"><div class="flow-title">Race condition UX</div><div class="flow-desc">409 from API → show "This slot was just taken — choose another time" → redirect back to slots page. Test: open two tabs, book same slot simultaneously → exactly one succeeds.</div></div></div>
+  </div>
+
+  <h2 class="sec"><span class="sec-num">F2–F3</span> Schedule &amp; Service Management</h2>
+  <p class="body"><strong>F2:</strong> GET/PUT /admin/schedule. Schedule settings UI: working day toggles, time pickers, break window manager. Branding settings. <strong>Done when:</strong> change Tuesday to OFF, save, reload — Tuesday stays OFF.</p>
+  <p class="body"><strong>F3:</strong> Full service CRUD. Soft delete (isActive=false — never hard delete, bookings reference services). <strong>Done when:</strong> deactivate a service — it disappears from GET /public/:slug/services.</p>
+
+  <h2 class="sec"><span class="sec-num">F5–F11</span> Remaining Features</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Feature</th><th>Key task</th><th>Done when</th></tr></thead>
+      <tbody>
+        <tr><td><span class="tag tag-b">F5</span> Admin Bookings</td><td>KPI cards, bookings list, slide-over detail, confirm/cancel/complete with optimistic UI updates</td><td>Admin confirms booking — badge updates instantly, email sent to customer</td></tr>
+        <tr><td><span class="tag tag-b">F6</span> Emails</td><td>7 React Email templates, .ics attachment, try-catch on every send, confirmationEmailStatus on Booking</td><td>All 7 types received + rendered on mobile Gmail. Email failure doesn't fail the booking.</td></tr>
+        <tr><td><span class="tag tag-b">F7</span> Cancel Link</td><td>GET/POST /public/bookings/cancel/:token. Cancel page at /cancel/[token].</td><td>Cancel via email link → status CANCELLED → both emails sent → re-clicking shows "already cancelled"</td></tr>
+        <tr><td><span class="tag tag-b">F8</span> Staff</td><td>Invite flow, accept-invite, requireRole middleware, role-restricted dashboard for STAFF</td><td>Staff logs in — Services/Schedule/Staff nav hidden. Staff JWT on DELETE /admin/services returns 403.</td></tr>
+        <tr><td><span class="tag tag-b">F9</span> Cron</td><td>node-cron in Express, query bookings 20–28hrs out with reminderSentAt IS NULL, send + mark</td><td>Manually trigger job — reminder email received, reminderSentAt set, second trigger sends nothing</td></tr>
+        <tr><td><span class="tag tag-b">F10</span> Super Admin</td><td>isSuperAdmin on User, /superadmin/* routes, tenant list with activate/deactivate</td><td>Deactivate tenant — /book/[slug] returns 404. Tenant JWT on /superadmin/* returns 403.</td></tr>
+        <tr><td><span class="tag tag-a">F11</span> Deploy</td><td>Railway (API + Postgres), Vercel (frontend), CNAME for booking.virajdomadia.com, GitHub Actions CI/CD</td><td>Live URL works. Full booking end-to-end on real mobile. 50-user concurrent test passes.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     CHECKLIST
+════════════════════════════════════════════════ -->
+<div class="page" id="page-check">
+  <div class="eyebrow">pre-launch checklist<div class="eyebrow-line"></div></div>
+  <h1 class="page-title">Before you<br><em>ship it.</em></h1>
+  <p class="page-sub">Run through every item before showing to a client or hiring manager. Click to mark complete.</p>
+
+  <h2 class="sec"><span class="sec-num">§1</span> Security</h2>
+  <ul class="checklist" id="cl-sec">
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>RLS policies applied: cross-tenant query returns empty for both tenants</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>Refresh token httpOnly — not visible in browser DevTools JS console</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>All admin routes return 401 without valid JWT — verified with curl</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>Rate limiting on /auth/login working — test with 15 rapid requests</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>CORS rejects requests from origins other than ROOT_DOMAIN</span></li>
+  </ul>
+
+  <h2 class="sec"><span class="sec-num">§2</span> Booking Logic</h2>
+  <ul class="checklist">
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>Concurrent test: 50 simultaneous requests same slot → exactly 1 created, 49 rejected</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>Break times block slots correctly — add 13:00–14:00 break, verify no slots exist then</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>Past slots not shown — all returned slots are in the future</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>Service duration respected — 60-min service creates 60-min gap between slots</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>Closed days show no slots — mark Sunday closed, verify no Sunday slots appear</span></li>
+  </ul>
+
+  <h2 class="sec"><span class="sec-num">§3</span> Email</h2>
+  <ul class="checklist">
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>Booking confirmation email received in Gmail (check spam first)</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>.ics attachment opens in Google Calendar and iPhone Calendar</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>Cancel link in email works — booking status updates to CANCELLED</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>All emails render correctly on mobile Gmail (real phone, not DevTools)</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>Email failure does not fail the booking — kill API key temporarily, booking still created</span></li>
+  </ul>
+
+  <h2 class="sec"><span class="sec-num">§4</span> Multi-Tenancy</h2>
+  <ul class="checklist">
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>Two demo tenants live at two subdomains, both working independently</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>Tenant A admin cannot see Tenant B's bookings</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>Tenant branding shows correctly — different logo + colour per tenant</span></li>
+  </ul>
+
+  <h2 class="sec"><span class="sec-num">§5</span> UX</h2>
+  <ul class="checklist">
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>Path-based routing works: localhost:3000/book/demo-clinic and localhost:3000/book/demo-salon load independently</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>No middleware.ts file exists in apps/web — confirm with ls apps/web/middleware.ts</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>Demo database has realistic seed data — not empty or placeholder text</span></li>
+    <li onclick="ck(this)"><div class="check-box"><span class="check-tick">✓</span></div><span>README has live demo link, setup instructions, architecture notes</span></li>
+  </ul>
+
+  <div class="check-progress">
+    <div class="cp-top">
+      <span class="cp-label">Launch readiness</span>
+      <span class="cp-val" id="cp-val">0 / 23</span>
+    </div>
+    <div class="cp-bar-bg"><div class="cp-bar" id="cp-bar" style="width:0%"></div></div>
+  </div>
+</div>
+
+</div><!-- #main -->
+</div><!-- #shell -->
+
+<script>
+const titles = {
+  prd:'PRD', trd:'TRD', flow:'App Flows',
+  uiux:'UI / UX + Wireframes', plan:'Schema & Build Plan',
+  fixes:'All Fixes & Decisions',
+  predev:'Pre-Dev Setup',
+  auth:'Auth Architecture',
+  deploy:'Deployment & Routing',
+  features:'Feature Build Guide',
+  check:'Pre-launch Checklist'
+};
+
+function show(id, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.sb-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  if (btn) btn.classList.add('active');
+  document.getElementById('topbar-title').textContent = titles[id] || id;
+  document.getElementById('main').scrollTop = 0;
+  closeMob();
+  updateProgress();
+}
+
+function ck(el) {
+  el.classList.toggle('done');
+  updateProgress();
+}
+
+function updateProgress() {
+  const all  = document.querySelectorAll('.checklist .check-item');
+  const done = document.querySelectorAll('.checklist .check-item.done');
+  const pct  = all.length ? Math.round(done.length / all.length * 100) : 0;
+  const bar  = document.getElementById('cp-bar');
+  const val  = document.getElementById('cp-val');
+  if (bar) bar.style.width = pct + '%';
+  if (val) val.textContent = done.length + ' / ' + all.length;
+}
+
+function openMob() {
+  document.getElementById('sidebar').style.transform = 'translateX(0)';
+  document.getElementById('mob-overlay').classList.add('open');
+}
+function closeMob() {
+  document.getElementById('sidebar').style.transform = '';
+  document.getElementById('mob-overlay').classList.remove('open');
+}
+
+updateProgress();
+</script>
+</body>
+</html>

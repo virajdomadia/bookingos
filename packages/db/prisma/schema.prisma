@@ -1,0 +1,109 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id           String    @id @default(cuid())
+  name         String
+  slug         String    @unique
+  logoUrl      String?
+  primaryColor String    @default("#4F46E5")
+  plan         String    @default("FREE")
+  isActive     Boolean   @default(true)
+
+  users        User[]
+  services     Service[]
+  bookings     Booking[]
+  schedule     Schedule?
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model User {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email        String
+  passwordHash String
+  role         String   @default("OWNER")
+  isSuperAdmin Boolean  @default(false)
+  isActive     Boolean  @default(true)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+model Service {
+  id              String   @id @default(cuid())
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name            String
+  durationMinutes Int
+  price           Float    @default(0)
+  isActive        Boolean  @default(true)
+  isStaffService  Boolean  @default(false)
+
+  bookings        Booking[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, isActive])
+}
+
+model Booking {
+  id                      String   @id @default(cuid())
+  tenantId                String
+  tenant                  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  serviceId               String
+  service                 Service  @relation(fields: [serviceId], references: [id])
+
+  customerName            String
+  customerEmail           String
+  customerPhone           String?
+  startsAt                DateTime
+  endsAt                  DateTime
+  status                  String   @default("PENDING")
+  cancelToken             String   @unique @default(cuid())
+  adminNotes              String?
+  confirmationEmailStatus String   @default("SENT")
+  reminderSentAt          DateTime?
+
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([tenantId, startsAt])
+  @@index([tenantId, status])
+  @@index([cancelToken])
+  @@index([reminderSentAt])
+}
+
+model Schedule {
+  id          String   @id @default(cuid())
+  tenantId    String   @unique
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  timezone    String   @default("Asia/Kolkata")
+  workingDays Json     @default("{\"mon\": true, \"tue\": true, \"wed\": true, \"thu\": true, \"fri\": true, \"sat\": false, \"sun\": false}")
+  workStart   String   @default("09:00")
+  workEnd     String   @default("18:00")
+  slotInterval Int     @default(30)
+  breakTimes  Json     @default("[]")
+  bufferTime  Int      @default(0)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
