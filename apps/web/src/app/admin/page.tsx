@@ -188,10 +188,6 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          <p style={{ color: "#6b7280", marginBottom: "1rem", fontSize: "0.875rem" }}>
-            Access Token: {accessToken.slice(0, 20)}...
-          </p>
-
           <div style={styles.nav}>
             <button style={styles.navLink}>📅 Bookings (Coming Soon)</button>
             <button style={styles.navLink}>⚙️ Services (Coming Soon)</button>

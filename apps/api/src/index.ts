@@ -5,6 +5,7 @@ import cookieParser from "cookie-parser";
 import path from "path";
 import { fileURLToPath } from "url";
 import authRouter from "./routes/auth.js";
+import adminRouter from "./routes/admin.js";
 
 // Load .env from the correct directory
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -75,8 +76,6 @@ app.use(
 // Routes
 app.use("/auth", authRouter);
 
-// Import admin routes
-import adminRouter from "./routes/admin.js";
 app.use("/admin", adminRouter);
 
 // Health check (public)

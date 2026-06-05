@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import type { Router as ExpressRouter } from "express";
 import { z, ZodError } from "zod";
 import rateLimit from "express-rate-limit";
-import { generateTokens, verifyAccessToken } from "../utils/jwt.js";
+import { generateTokens } from "../utils/jwt.js";
 import { hashPassword, verifyPassword, validatePassword } from "../utils/password.js";
 import prisma from "../lib/prisma.js";
 import { ApiError, AuthResponse, ErrorCode } from "../types/api.js";
@@ -248,6 +248,10 @@ router.post("/login", authLimiter, async (req: Request, res: Response) => {
       return sendError(res, 401, "Invalid credentials", ErrorCode.INVALID_CREDENTIALS);
     }
 
+    if (!user.isActive || !user.tenant.isActive) {
+      return sendError(res, 403, "Account is deactivated. Please contact support.", ErrorCode.FORBIDDEN);
+    }
+
     // Verify password
     const passwordMatch = await verifyPassword(password, user.passwordHash);
     if (!passwordMatch) {
@@ -318,7 +322,7 @@ router.post("/refresh", async (req: Request, res: Response) => {
     // Find refresh token in database
     const tokenRecord = await prisma.refreshToken.findUnique({
       where: { token: refreshToken },
-      include: { user: true },
+      include: { user: { include: { tenant: true } } },
     });
 
     if (!tokenRecord || tokenRecord.expiresAt < new Date()) {
@@ -331,6 +335,12 @@ router.post("/refresh", async (req: Request, res: Response) => {
     }
 
     const user = tokenRecord.user;
+
+    if (!user.isActive || !user.tenant.isActive) {
+      await prisma.refreshToken.delete({ where: { id: tokenRecord.id } });
+      res.clearCookie("refreshToken");
+      return sendError(res, 403, "Account is deactivated. Please contact support.", ErrorCode.FORBIDDEN);
+    }
 
     // Generate new tokens
     const { accessToken, refreshToken: newRefreshToken, refreshTokenExpiry } = generateTokens({

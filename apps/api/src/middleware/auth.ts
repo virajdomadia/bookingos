@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import jwt, { JwtPayload } from "jsonwebtoken";
+import jwt from "jsonwebtoken";
 
 declare global {
   namespace Express {
@@ -15,14 +15,6 @@ declare global {
     }
   }
 }
-
-export const verifyJWT = (token: string): any => {
-  try {
-    return jwt.verify(token, process.env.JWT_SECRET!);
-  } catch (error) {
-    return null;
-  }
-};
 
 export const authMiddleware = async (
   req: Request,

@@ -1,9 +1,10 @@
 import { Router, Request, Response, NextFunction } from "express";
+import type { Router as ExpressRouter } from "express";
 import { authMiddleware, requireRole } from "../middleware/auth.js";
 import prisma from "../lib/prisma.js";
 import { ApiError, ErrorCode } from "../types/api.js";
 
-const router = Router();
+const router: ExpressRouter = Router();
 
 // All routes in this file require authentication
 router.use(authMiddleware);
@@ -46,7 +47,7 @@ router.get("/schedule", async (req: Request, res: Response) => {
 // PUT /admin/schedule
 // ============================================================================
 
-router.put("/schedule", requireRole("OWNER", "ADMIN"), async (req: Request, res: Response) => {
+router.put("/schedule", requireRole(["OWNER", "ADMIN"]), async (req: Request, res: Response) => {
   try {
     if (!req.tenantId) {
       return sendError(res, 401, "Tenant ID not found in context", ErrorCode.UNAUTHORIZED);
@@ -56,12 +57,12 @@ router.put("/schedule", requireRole("OWNER", "ADMIN"), async (req: Request, res:
       req.body;
 
     // Validate input
-    if (workStart && !/^[0-2][0-9]:[0-5][0-9]$/.test(workStart)) {
-      return sendError(res, 400, "Invalid workStart format. Use HH:MM", ErrorCode.VALIDATION_ERROR);
+    if (workStart && !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(workStart)) {
+      return sendError(res, 400, "Invalid workStart format. Use HH:MM (00:00–23:59)", ErrorCode.VALIDATION_ERROR);
     }
 
-    if (workEnd && !/^[0-2][0-9]:[0-5][0-9]$/.test(workEnd)) {
-      return sendError(res, 400, "Invalid workEnd format. Use HH:MM", ErrorCode.VALIDATION_ERROR);
+    if (workEnd && !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(workEnd)) {
+      return sendError(res, 400, "Invalid workEnd format. Use HH:MM (00:00–23:59)", ErrorCode.VALIDATION_ERROR);
     }
 
     if (slotInterval && (slotInterval < 5 || slotInterval > 120)) {
@@ -122,7 +123,7 @@ router.get("/services", async (req: Request, res: Response) => {
 
 router.post(
   "/services",
-  requireRole("OWNER", "ADMIN"),
+  requireRole(["OWNER", "ADMIN"]),
   async (req: Request, res: Response) => {
     try {
       if (!req.tenantId) {
@@ -167,7 +168,7 @@ router.post(
 
 router.put(
   "/services/:id",
-  requireRole("OWNER", "ADMIN"),
+  requireRole(["OWNER", "ADMIN"]),
   async (req: Request, res: Response) => {
     try {
       if (!req.tenantId) {
@@ -223,7 +224,7 @@ router.put(
 
 router.delete(
   "/services/:id",
-  requireRole("OWNER", "ADMIN"),
+  requireRole(["OWNER", "ADMIN"]),
   async (req: Request, res: Response) => {
     try {
       if (!req.tenantId) {
