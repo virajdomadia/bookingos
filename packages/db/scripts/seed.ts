@@ -3,37 +3,36 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("Seeding database...");
+  console.log("🌱 Seeding database...");
 
-  // Create test tenants
+  // Create test tenants (let CUID generate IDs)
   const tenant1 = await prisma.tenant.upsert({
     where: { slug: "demo-clinic" },
     update: {},
     create: {
-      id: "tenant_demo_clinic",
       name: "Demo Clinic",
       slug: "demo-clinic",
       primaryColor: "#3B82F6",
     },
   });
+  console.log(`✓ Created tenant: ${tenant1.name} (ID: ${tenant1.id})`);
 
   const tenant2 = await prisma.tenant.upsert({
     where: { slug: "test-salon" },
     update: {},
     create: {
-      id: "tenant_test_salon",
       name: "Test Salon",
       slug: "test-salon",
       primaryColor: "#EC4899",
     },
   });
+  console.log(`✓ Created tenant: ${tenant2.name} (ID: ${tenant2.id})`);
 
   // Create schedules
-  await prisma.schedule.upsert({
+  const schedule1 = await prisma.schedule.upsert({
     where: { tenantId: tenant1.id },
     update: {},
     create: {
-      id: "schedule_1",
       tenantId: tenant1.id,
       timezone: "Asia/Kolkata",
       workStart: "09:00",
@@ -41,12 +40,12 @@ async function main() {
       slotInterval: 30,
     },
   });
+  console.log(`✓ Created schedule for ${tenant1.name}`);
 
-  await prisma.schedule.upsert({
+  const schedule2 = await prisma.schedule.upsert({
     where: { tenantId: tenant2.id },
     update: {},
     create: {
-      id: "schedule_2",
       tenantId: tenant2.id,
       timezone: "Asia/Kolkata",
       workStart: "10:00",
@@ -54,26 +53,24 @@ async function main() {
       slotInterval: 30,
     },
   });
+  console.log(`✓ Created schedule for ${tenant2.name}`);
 
   // Create services for clinic
-  await prisma.service.createMany({
+  const clinicServices = await prisma.service.createMany({
     data: [
       {
-        id: "service_1",
         tenantId: tenant1.id,
         name: "General Consultation",
         durationMinutes: 30,
         price: 500,
       },
       {
-        id: "service_2",
         tenantId: tenant1.id,
         name: "Extended Consultation",
         durationMinutes: 60,
         price: 1000,
       },
       {
-        id: "service_3",
         tenantId: tenant1.id,
         name: "Follow-up",
         durationMinutes: 15,
@@ -82,26 +79,24 @@ async function main() {
     ],
     skipDuplicates: true,
   });
+  console.log(`✓ Created ${clinicServices.count} services for ${tenant1.name}`);
 
   // Create services for salon
-  await prisma.service.createMany({
+  const salonServices = await prisma.service.createMany({
     data: [
       {
-        id: "service_4",
         tenantId: tenant2.id,
         name: "Haircut",
         durationMinutes: 45,
         price: 600,
       },
       {
-        id: "service_5",
         tenantId: tenant2.id,
         name: "Hair Color",
         durationMinutes: 90,
         price: 2000,
       },
       {
-        id: "service_6",
         tenantId: tenant2.id,
         name: "Facial",
         durationMinutes: 60,
@@ -110,13 +105,17 @@ async function main() {
     ],
     skipDuplicates: true,
   });
+  console.log(`✓ Created ${salonServices.count} services for ${tenant2.name}`);
 
-  console.log("Seed complete!");
+  console.log("\n✅ Seed complete!");
+  console.log("\n📝 Demo tenants:");
+  console.log(`   - ${tenant1.name}: slug="${tenant1.slug}", id="${tenant1.id}"`);
+  console.log(`   - ${tenant2.name}: slug="${tenant2.slug}", id="${tenant2.id}"`);
 }
 
 main()
   .catch((e) => {
-    console.error(e);
+    console.error("❌ Seed error:", e);
     process.exit(1);
   })
   .finally(async () => {

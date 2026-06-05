@@ -8,6 +8,23 @@ import prisma from "../lib/prisma.js";
 
 const router: ExpressRouter = Router();
 
+// Helper function to sanitize and validate slugs
+const sanitizeSlug = (name: string): string => {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-") // spaces → dashes
+    .replace(/[^a-z0-9-]/g, "") // remove invalid chars
+    .replace(/-+/g, "-") // collapse multiple dashes
+    .replace(/^-+|-+$/g, "") // trim leading/trailing dashes
+    .substring(0, 50);
+};
+
+// Helper function to normalize email addresses
+const normalizeEmail = (email: string): string => {
+  return email.toLowerCase().trim();
+};
+
 // Rate limiting for auth endpoints (Issue #7: No Rate Limiting)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -32,7 +49,10 @@ const loginSchema = z.object({
 // POST /auth/register
 router.post("/register", authLimiter, async (req: Request, res: Response) => {
   try {
-    const { tenantName, email, password } = registerSchema.parse(req.body);
+    const { tenantName, email: rawEmail, password } = registerSchema.parse(req.body);
+
+    // Normalize email
+    const email = normalizeEmail(rawEmail);
 
     // Validate password strength
     const passwordValidation = validatePassword(password);
@@ -48,14 +68,10 @@ router.post("/register", authLimiter, async (req: Request, res: Response) => {
       return res.status(409).json({ error: "Email already registered" });
     }
 
-    // Generate slug (Issue #6: Slug Validation)
-    const slug = tenantName
-      .toLowerCase()
-      .replace(/\s+/g, "-")
-      .replace(/[^a-z0-9-]/g, "")
-      .substring(0, 50);
+    // Generate and sanitize slug
+    const slug = sanitizeSlug(tenantName);
 
-    // Validate slug length
+    // Validate slug is valid
     if (slug.length < 3) {
       return res.status(400).json({
         error: "Business name too short (need at least 3 characters after formatting)"
@@ -149,7 +165,10 @@ router.post("/register", authLimiter, async (req: Request, res: Response) => {
 // POST /auth/login
 router.post("/login", authLimiter, async (req: Request, res: Response) => {
   try {
-    const { email, password } = loginSchema.parse(req.body);
+    const { email: rawEmail, password } = loginSchema.parse(req.body);
+
+    // Normalize email for consistent lookup
+    const email = normalizeEmail(rawEmail);
 
     // Find user
     const user = await prisma.user.findFirst({
