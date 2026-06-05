@@ -1,31 +1,13 @@
 import { Router, Request, Response } from "express";
+import type { Router as ExpressRouter } from "express";
 import { z } from "zod";
 import { generateTokens, verifyAccessToken } from "../utils/jwt.js";
 import { hashPassword, verifyPassword, validatePassword } from "../utils/password.js";
+import prisma from "../lib/prisma.js";
 
-const router = Router();
+const router: ExpressRouter = Router();
 
-// In-memory storage for demo (will be Prisma + PostgreSQL later)
-const users: Record<
-  string,
-  {
-    userId: string;
-    tenantId: string;
-    email: string;
-    passwordHash: string;
-    role: string;
-  }
-> = {};
-
-const tenants: Record<
-  string,
-  {
-    id: string;
-    name: string;
-    slug: string;
-  }
-> = {};
-
+// In-memory storage for refresh tokens only
 const refreshTokens: Record<
   string,
   {
@@ -59,48 +41,75 @@ router.post("/register", async (req: Request, res: Response) => {
     }
 
     // Check if user already exists
-    const existingUser = Object.values(users).find(u => u.email === email);
+    const existingUser = await prisma.user.findFirst({
+      where: { email },
+    });
     if (existingUser) {
       return res.status(409).json({ error: "Email already registered" });
     }
 
-    // Create tenant
-    const tenantId = `tenant_${Date.now()}`;
+    // Generate slug
     const slug = tenantName
       .toLowerCase()
       .replace(/\s+/g, "-")
       .replace(/[^a-z0-9-]/g, "");
 
-    tenants[tenantId] = {
-      id: tenantId,
-      name: tenantName,
-      slug: slug,
-    };
+    // Check if slug already exists
+    const existingTenant = await prisma.tenant.findUnique({
+      where: { slug },
+    });
+    if (existingTenant) {
+      return res.status(409).json({ error: "Business name already taken" });
+    }
 
     // Hash password
     const passwordHash = await hashPassword(password);
 
-    // Create user
-    const userId = `user_${Date.now()}`;
-    users[userId] = {
-      userId,
-      tenantId,
-      email,
-      passwordHash,
-      role: "OWNER",
-    };
+    // Create tenant, schedule, and user in transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create tenant
+      const tenant = await tx.tenant.create({
+        data: {
+          name: tenantName,
+          slug,
+        },
+      });
+
+      // Create schedule with default settings
+      await tx.schedule.create({
+        data: {
+          tenantId: tenant.id,
+          timezone: "Asia/Kolkata",
+          workStart: "09:00",
+          workEnd: "18:00",
+          slotInterval: 30,
+        },
+      });
+
+      // Create user
+      const user = await tx.user.create({
+        data: {
+          tenantId: tenant.id,
+          email,
+          passwordHash,
+          role: "OWNER",
+        },
+      });
+
+      return { tenant, user };
+    });
 
     // Generate tokens
     const { accessToken, refreshToken, refreshTokenExpiry } = generateTokens({
-      userId,
-      tenantId,
+      userId: result.user.id,
+      tenantId: result.tenant.id,
       role: "OWNER",
     });
 
     // Store refresh token
     refreshTokens[refreshToken] = {
-      userId,
-      tenantId,
+      userId: result.user.id,
+      tenantId: result.tenant.id,
       expiresAt: Date.now() + refreshTokenExpiry * 1000,
     };
 
@@ -114,8 +123,8 @@ router.post("/register", async (req: Request, res: Response) => {
 
     res.status(201).json({
       accessToken,
-      user: { userId, email, role: "OWNER" },
-      tenant: { id: tenantId, name: tenantName, slug },
+      user: { userId: result.user.id, email: result.user.email, role: result.user.role },
+      tenant: { id: result.tenant.id, name: result.tenant.name, slug: result.tenant.slug },
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -132,7 +141,9 @@ router.post("/login", async (req: Request, res: Response) => {
     const { email, password } = loginSchema.parse(req.body);
 
     // Find user
-    const user = Object.values(users).find(u => u.email === email);
+    const user = await prisma.user.findFirst({
+      where: { email },
+    });
     if (!user) {
       return res.status(401).json({ error: "Invalid email or password" });
     }
@@ -145,14 +156,14 @@ router.post("/login", async (req: Request, res: Response) => {
 
     // Generate tokens
     const { accessToken, refreshToken, refreshTokenExpiry } = generateTokens({
-      userId: user.userId,
+      userId: user.id,
       tenantId: user.tenantId,
       role: user.role,
     });
 
     // Store refresh token
     refreshTokens[refreshToken] = {
-      userId: user.userId,
+      userId: user.id,
       tenantId: user.tenantId,
       expiresAt: Date.now() + refreshTokenExpiry * 1000,
     };
@@ -168,7 +179,7 @@ router.post("/login", async (req: Request, res: Response) => {
     res.json({
       accessToken,
       user: {
-        userId: user.userId,
+        userId: user.id,
         email: user.email,
         role: user.role,
       },
