@@ -6,6 +6,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import authRouter from "./routes/auth.js";
 import adminRouter from "./routes/admin.js";
+import publicRouter from "./routes/public.js";
 
 // Load .env from the correct directory
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -75,8 +76,8 @@ app.use(
 
 // Routes
 app.use("/auth", authRouter);
-
 app.use("/admin", adminRouter);
+app.use("/public", publicRouter);
 
 // Health check (public)
 app.get("/health", (req: Request, res: Response) => {

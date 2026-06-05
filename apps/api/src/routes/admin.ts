@@ -65,6 +65,10 @@ router.put("/schedule", requireRole(["OWNER", "ADMIN"]), async (req: Request, re
       return sendError(res, 400, "Invalid workEnd format. Use HH:MM (00:00–23:59)", ErrorCode.VALIDATION_ERROR);
     }
 
+    if (workStart && workEnd && workStart >= workEnd) {
+      return sendError(res, 400, "Work start must be before work end", ErrorCode.VALIDATION_ERROR);
+    }
+
     if (slotInterval !== undefined && (typeof slotInterval !== "number" || slotInterval < 5 || slotInterval > 120)) {
       return sendError(
         res,
@@ -138,7 +142,7 @@ router.post(
         return sendError(res, 401, "Tenant ID not found in context", ErrorCode.UNAUTHORIZED);
       }
 
-      const { name, durationMinutes, price } = req.body;
+      const { name, durationMinutes, price, isStaffService } = req.body;
 
       // Validation
       if (!name || typeof name !== "string" || name.length < 1 || name.length > 100) {
@@ -159,6 +163,7 @@ router.post(
           name: name.trim(),
           durationMinutes,
           price,
+          isStaffService: isStaffService === true,
         },
       });
 
