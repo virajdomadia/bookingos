@@ -13,6 +13,10 @@ dist/
 build/
 .next/
 out/
+tsconfig.tsbuildinfo
+
+# Claude Code
+.claude/
 
 # IDE
 .vscode/
