@@ -1,3 +1,5 @@
+import { AuthProvider } from "@/context/AuthContext";
+
 export const metadata = {
   title: "BookingOS",
   description: "White-label appointment booking platform",
@@ -10,7 +12,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }
