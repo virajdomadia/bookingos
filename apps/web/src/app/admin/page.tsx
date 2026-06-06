@@ -15,6 +15,12 @@ interface Tenant {
   primaryColor: string;
 }
 
+interface Stats {
+  today: number;
+  thisWeek: number;
+  pending: number;
+}
+
 interface NavItem {
   href: string;
   label: string;
@@ -26,20 +32,15 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: "/admin/schedule", label: "Schedule & Branding", icon: "📋", description: "Working hours, breaks, timezone, logo" },
   { href: "/admin/services", label: "Services", icon: "⚙️", description: "Manage your bookable services" },
-  { href: "/admin/bookings", label: "Bookings", icon: "📅", description: "View and manage appointments", comingSoon: true },
+  { href: "/admin/bookings", label: "Bookings", icon: "📅", description: "View and manage appointments" },
   { href: "/admin/staff", label: "Staff", icon: "👥", description: "Manage team members and roles", comingSoon: true },
-];
-
-const KPI_ITEMS = [
-  { label: "Today's Bookings", value: "—" },
-  { label: "This Week", value: "—" },
-  { label: "Pending", value: "—" },
 ];
 
 export default function AdminDashboard() {
   const router = useRouter();
   const { accessToken, user, isLoading, logout } = useAuth();
   const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
 
   useEffect(() => {
     if (!isLoading && !accessToken) router.push("/auth");
@@ -48,6 +49,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (!accessToken) return;
     api.get("/admin/tenant").then((res) => setTenant(res.data.data)).catch(() => null);
+    api.get("/admin/stats").then((res) => setStats(res.data.data)).catch(() => null);
   }, [accessToken]);
 
   const handleLogout = async () => {
@@ -89,10 +91,16 @@ export default function AdminDashboard() {
       <main className="max-w-4xl mx-auto px-4 py-6 space-y-5">
         {/* KPI strip */}
         <div className="grid grid-cols-3 gap-4">
-          {KPI_ITEMS.map(({ label, value }) => (
+          {[
+            { label: "Today's Bookings", value: stats?.today },
+            { label: "This Week", value: stats?.thisWeek },
+            { label: "Pending", value: stats?.pending },
+          ].map(({ label, value }) => (
             <Card key={label}>
               <CardContent className="pt-5 pb-4 text-center">
-                <div className="text-3xl font-bold text-gray-900">{value}</div>
+                <div className="text-3xl font-bold text-gray-900">
+                  {value === undefined ? "—" : value}
+                </div>
                 <div className="text-xs text-muted-foreground mt-1 uppercase tracking-wide">{label}</div>
               </CardContent>
             </Card>

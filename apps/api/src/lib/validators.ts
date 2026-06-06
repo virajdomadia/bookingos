@@ -124,6 +124,28 @@ export const bookingCreateSchema = z.object({
 
 export type BookingCreateInput = z.infer<typeof bookingCreateSchema>;
 
+// ---------------------------------------------------------------------------
+// Admin booking management (F5)
+// ---------------------------------------------------------------------------
+
+const VALID_STATUSES = ["PENDING", "CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"] as const;
+
+export const bookingListQuerySchema = z.object({
+  status: z.enum(VALID_STATUSES).optional(),
+  serviceId: z.string().optional(),
+  dateFrom: isoDate.optional(),
+  dateTo: isoDate.optional(),
+  page: z.coerce.number().int().min(1).optional().default(1),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+});
+
+export type BookingListQuery = z.infer<typeof bookingListQuerySchema>;
+
+export const bookingStatusPatchSchema = z.object({
+  status: z.enum(VALID_STATUSES),
+  adminNotes: z.string().trim().max(1000).optional(),
+});
+
 export interface EffectiveSchedule {
   workStart: string;
   workEnd: string;

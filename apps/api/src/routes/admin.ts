@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import type { Router as ExpressRouter } from "express";
+import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
 import { authMiddleware, requireRole } from "../middleware/auth.js";
 import prisma from "../lib/prisma.js";
@@ -10,6 +11,8 @@ import {
   tenantUpdateSchema,
   scheduleUpdateSchema,
   validateScheduleCoherence,
+  bookingListQuerySchema,
+  bookingStatusPatchSchema,
 } from "../lib/validators.js";
 import { ApiError, ErrorCode } from "../types/api.js";
 
@@ -265,5 +268,184 @@ router.put("/tenant", requireRole(["OWNER"]), async (req: Request, res: Response
     sendError(res, 500, "Failed to update tenant", ErrorCode.INTERNAL_ERROR);
   }
 });
+
+// ============================================================================
+// GET /admin/stats  — KPI counts for dashboard
+// ============================================================================
+
+router.get("/stats", async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const now = new Date();
+
+    // Today: midnight → 23:59:59 UTC (close enough for server-side counts)
+    const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+
+    // This week: Monday → Sunday
+    const dayOfWeek = now.getUTCDay(); // 0=Sun … 6=Sat
+    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const weekStart = new Date(todayStart.getTime() - daysFromMonday * 24 * 60 * 60 * 1000);
+    const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const [todayCount, weekCount, pendingCount] = await Promise.all([
+      prisma.booking.count({
+        where: { tenantId, status: { not: "CANCELLED" }, startsAt: { gte: todayStart, lt: todayEnd } },
+      }),
+      prisma.booking.count({
+        where: { tenantId, status: { not: "CANCELLED" }, startsAt: { gte: weekStart, lt: weekEnd } },
+      }),
+      prisma.booking.count({
+        where: { tenantId, status: "PENDING" },
+      }),
+    ]);
+
+    res.json({ data: { today: todayCount, thisWeek: weekCount, pending: pendingCount } });
+  } catch (error) {
+    console.error("Get stats error:", error);
+    sendError(res, 500, "Failed to fetch stats", ErrorCode.INTERNAL_ERROR);
+  }
+});
+
+// ============================================================================
+// GET /admin/bookings  — list with filters + pagination
+// ============================================================================
+
+router.get("/bookings", async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const query = bookingListQuerySchema.parse(req.query);
+
+    const where: Prisma.BookingWhereInput = { tenantId };
+
+    if (query.status) where.status = query.status;
+    if (query.serviceId) where.serviceId = query.serviceId;
+    if (query.dateFrom || query.dateTo) {
+      where.startsAt = {
+        ...(query.dateFrom && { gte: new Date(query.dateFrom) }),
+        ...(query.dateTo && { lt: new Date(new Date(query.dateTo).getTime() + 24 * 60 * 60 * 1000) }),
+      };
+    }
+
+    const skip = (query.page - 1) * query.limit;
+
+    const [bookings, total] = await Promise.all([
+      prisma.booking.findMany({
+        where,
+        orderBy: { startsAt: "asc" },
+        skip,
+        take: query.limit,
+        select: {
+          id: true,
+          customerName: true,
+          customerEmail: true,
+          customerPhone: true,
+          customerNotes: true,
+          adminNotes: true,
+          startsAt: true,
+          endsAt: true,
+          status: true,
+          cancelToken: true,
+          confirmationEmailStatus: true,
+          createdAt: true,
+          service: { select: { id: true, name: true, durationMinutes: true, price: true } },
+        },
+      }),
+      prisma.booking.count({ where }),
+    ]);
+
+    res.json({
+      data: {
+        bookings,
+        total,
+        page: query.page,
+        limit: query.limit,
+        hasMore: skip + bookings.length < total,
+      },
+    });
+  } catch (error) {
+    if (error instanceof ZodError) return sendValidationError(res, error);
+    console.error("Get bookings error:", error);
+    sendError(res, 500, "Failed to fetch bookings", ErrorCode.INTERNAL_ERROR);
+  }
+});
+
+// ============================================================================
+// PATCH /admin/bookings/:id  — update status + optional admin notes
+// ============================================================================
+
+// Allowed status transitions
+const TRANSITIONS: Record<string, string[]> = {
+  PENDING: ["CONFIRMED", "CANCELLED"],
+  CONFIRMED: ["COMPLETED", "CANCELLED", "NO_SHOW"],
+  COMPLETED: ["CANCELLED"],
+  NO_SHOW: ["CANCELLED"],
+  CANCELLED: [],
+};
+
+router.patch(
+  "/bookings/:id",
+  requireRole(["OWNER", "ADMIN", "STAFF"]),
+  async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.tenantId!;
+      const { id } = req.params;
+      const input = bookingStatusPatchSchema.parse(req.body);
+
+      const result = await withTenant(tenantId, async (tx) => {
+        const booking = await tx.booking.findFirst({ where: { id, tenantId } });
+        if (!booking) return { notFound: true as const };
+
+        const allowed = TRANSITIONS[booking.status] ?? [];
+        if (!allowed.includes(input.status)) {
+          return { invalidTransition: true as const, from: booking.status, to: input.status };
+        }
+
+        const updated = await tx.booking.update({
+          where: { id },
+          data: {
+            status: input.status,
+            ...(input.adminNotes !== undefined && { adminNotes: input.adminNotes }),
+          },
+          select: {
+            id: true,
+            customerName: true,
+            customerEmail: true,
+            customerPhone: true,
+            customerNotes: true,
+            adminNotes: true,
+            startsAt: true,
+            endsAt: true,
+            status: true,
+            cancelToken: true,
+            confirmationEmailStatus: true,
+            createdAt: true,
+            service: { select: { id: true, name: true, durationMinutes: true, price: true } },
+          },
+        });
+
+        return { booking: updated };
+      });
+
+      if ("notFound" in result) {
+        return sendError(res, 404, "Booking not found", ErrorCode.NOT_FOUND);
+      }
+      if ("invalidTransition" in result) {
+        return sendError(
+          res,
+          422,
+          `Cannot change status from ${result.from} to ${result.to}`,
+          ErrorCode.VALIDATION_ERROR
+        );
+      }
+
+      res.json({ data: result.booking });
+    } catch (error) {
+      if (error instanceof ZodError) return sendValidationError(res, error);
+      console.error("Patch booking error:", error);
+      sendError(res, 500, "Failed to update booking", ErrorCode.INTERNAL_ERROR);
+    }
+  }
+);
 
 export default router;
