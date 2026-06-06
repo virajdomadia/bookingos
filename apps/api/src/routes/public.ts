@@ -1,8 +1,16 @@
 import { Router, Request, Response } from "express";
 import type { Router as ExpressRouter } from "express";
 import rateLimit from "express-rate-limit";
+import { ZodError } from "zod";
+import { zonedWallTimeToUtc } from "@booking-os/utils";
 import prisma from "../lib/prisma.js";
 import { withTenant } from "../lib/tenantDb.js";
+import {
+  getAvailableSlots,
+  type AvailabilityScheduleConfig,
+  type BookingInterval,
+} from "../lib/availability.js";
+import { availabilityQuerySchema, bookingCreateSchema } from "../lib/validators.js";
 import { ApiError, ErrorCode } from "../types/api.js";
 
 const router: ExpressRouter = Router();
@@ -11,6 +19,15 @@ const router: ExpressRouter = Router();
 const publicLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ip || "unknown",
+});
+
+// Tighter limit on booking creation specifically — it writes and sends email.
+const bookingLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => req.ip || "unknown",
@@ -25,25 +42,113 @@ const sendError = (res: Response, status: number, error: string, code: ErrorCode
 
 const SLUG_RE = /^[a-z0-9-]{3,50}$/;
 
+/**
+ * The `Booking_no_overlap` GiST exclusion constraint (see migration
+ * 20260606150000) is the database's final guard against double-booking: two
+ * non-cancelled bookings whose time ranges overlap for a tenant can never both
+ * commit. Postgres raises SQLSTATE 23P01 (exclusion_violation), which we treat
+ * as "slot taken". This is the backstop for the phantom-write race that the
+ * SERIALIZABLE availability re-check alone cannot fully close.
+ */
+const isOverlapViolation = (err: unknown): boolean => {
+  const meta = (err as { meta?: { code?: string } } | undefined)?.meta;
+  if (meta?.code === "23P01") return true;
+  const msg = err instanceof Error ? err.message : String(err);
+  return /Booking_no_overlap|exclusion constraint|23P01/i.test(msg);
+};
+
 // Shared tenant lookup used by all /:slug/* routes.
 const resolveTenant = async (slug: string) => {
   if (!SLUG_RE.test(slug)) return null;
   return prisma.tenant.findUnique({
     where: { slug },
-    select: { id: true, isActive: true },
+    select: { id: true, isActive: true, name: true, slug: true, logoUrl: true, primaryColor: true },
   });
 };
 
+/** Reject calendar strings that pass the regex but aren't real dates (2026-02-30). */
+const parseRealDate = (date: string): { year: number; month: number; day: number } | null => {
+  const [year, month, day] = date.split("-").map(Number);
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  if (
+    probe.getUTCFullYear() !== year ||
+    probe.getUTCMonth() !== month - 1 ||
+    probe.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return { year, month, day };
+};
+
+/** Normalize a persisted Schedule row into the shape the engine expects. */
+const toScheduleConfig = (schedule: {
+  timezone: string;
+  workingDays: unknown;
+  workStart: string;
+  workEnd: string;
+  slotInterval: number;
+  breakTimes: unknown;
+  bufferTime: number;
+}): AvailabilityScheduleConfig => ({
+  timezone: schedule.timezone,
+  workingDays: schedule.workingDays as Record<string, boolean>,
+  workStart: schedule.workStart,
+  workEnd: schedule.workEnd,
+  slotInterval: schedule.slotInterval,
+  breakTimes: Array.isArray(schedule.breakTimes)
+    ? (schedule.breakTimes as { start: string; end: string }[])
+    : [],
+  bufferTime: schedule.bufferTime,
+});
+
 // ============================================================================
-// GET /public/:slug/services
+// GET /public/:slug  — tenant branding + active services (booking landing)
+// ============================================================================
+
+router.get("/:slug", async (req: Request, res: Response) => {
+  try {
+    const tenant = await resolveTenant(req.params.slug);
+    if (!tenant || !tenant.isActive) {
+      return sendError(res, 404, "Booking page not found", ErrorCode.NOT_FOUND);
+    }
+
+    const { services, schedule } = await withTenant(tenant.id, async (tx) => ({
+      services: await tx.service.findMany({
+        where: { tenantId: tenant.id, isActive: true },
+        select: { id: true, name: true, durationMinutes: true, price: true },
+        orderBy: { createdAt: "asc" },
+      }),
+      schedule: await tx.schedule.findUnique({
+        where: { tenantId: tenant.id },
+        select: { timezone: true },
+      }),
+    }));
+
+    res.json({
+      data: {
+        tenant: {
+          name: tenant.name,
+          slug: tenant.slug,
+          logoUrl: tenant.logoUrl,
+          primaryColor: tenant.primaryColor,
+          timezone: schedule?.timezone ?? "Asia/Kolkata",
+        },
+        services,
+      },
+    });
+  } catch (error) {
+    console.error("Public get tenant error:", error);
+    sendError(res, 500, "Failed to load booking page", ErrorCode.INTERNAL_ERROR);
+  }
+});
+
+// ============================================================================
+// GET /public/:slug/services  — active services only
 // ============================================================================
 
 router.get("/:slug/services", async (req: Request, res: Response) => {
   try {
-    const { slug } = req.params;
-
-    const tenant = await resolveTenant(slug);
-
+    const tenant = await resolveTenant(req.params.slug);
     if (!tenant || !tenant.isActive) {
       return sendError(res, 404, "Tenant not found", ErrorCode.NOT_FOUND);
     }
@@ -60,6 +165,211 @@ router.get("/:slug/services", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Public get services error:", error);
     sendError(res, 500, "Failed to fetch services", ErrorCode.INTERNAL_ERROR);
+  }
+});
+
+// ============================================================================
+// GET /public/:slug/availability?serviceId=X&date=YYYY-MM-DD
+// ============================================================================
+
+router.get("/:slug/availability", async (req: Request, res: Response) => {
+  try {
+    const tenant = await resolveTenant(req.params.slug);
+    if (!tenant || !tenant.isActive) {
+      return sendError(res, 404, "Tenant not found", ErrorCode.NOT_FOUND);
+    }
+
+    const { serviceId, date } = availabilityQuerySchema.parse(req.query);
+    const parsed = parseRealDate(date);
+    if (!parsed) {
+      return sendError(res, 400, "Invalid date", ErrorCode.VALIDATION_ERROR);
+    }
+
+    const result = await withTenant(tenant.id, async (tx) => {
+      const service = await tx.service.findFirst({
+        where: { id: serviceId, tenantId: tenant.id, isActive: true },
+        select: { durationMinutes: true },
+      });
+      if (!service) return { notFound: true as const };
+
+      const schedule = await tx.schedule.findUnique({ where: { tenantId: tenant.id } });
+      if (!schedule) return { slots: [] as BookingInterval[], config: null };
+
+      const config = toScheduleConfig(schedule);
+      const { year, month, day } = parsed;
+
+      // Pull bookings overlapping the requested day (padded by the buffer so a
+      // booking spilling in from an adjacent day is still considered).
+      const dayStart = zonedWallTimeToUtc(year, month, day, 0, 0, config.timezone);
+      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+      const pad = (config.bufferTime + 60) * 60 * 1000;
+
+      const bookings = await tx.booking.findMany({
+        where: {
+          tenantId: tenant.id,
+          status: { not: "CANCELLED" },
+          startsAt: { lt: new Date(dayEnd.getTime() + pad) },
+          endsAt: { gt: new Date(dayStart.getTime() - pad) },
+        },
+        select: { startsAt: true, endsAt: true },
+      });
+
+      const slots = getAvailableSlots({
+        date,
+        schedule: config,
+        serviceDurationMinutes: service.durationMinutes,
+        existingBookings: bookings,
+      });
+
+      return { slots: slots.map((s) => ({ time: s.label, startsAt: s.startsAt.toISOString() })) };
+    });
+
+    if ("notFound" in result) {
+      return sendError(res, 404, "Service not found", ErrorCode.NOT_FOUND);
+    }
+
+    res.json({ data: { slots: result.slots } });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return sendError(res, 400, error.errors[0]?.message ?? "Invalid request", ErrorCode.VALIDATION_ERROR);
+    }
+    console.error("Public availability error:", error);
+    sendError(res, 500, "Failed to fetch availability", ErrorCode.INTERNAL_ERROR);
+  }
+});
+
+// ============================================================================
+// POST /public/:slug/bookings  — create a booking (concurrency-safe)
+// ============================================================================
+
+router.post("/:slug/bookings", bookingLimiter, async (req: Request, res: Response) => {
+  try {
+    const tenant = await resolveTenant(req.params.slug);
+    if (!tenant || !tenant.isActive) {
+      return sendError(res, 404, "Tenant not found", ErrorCode.NOT_FOUND);
+    }
+
+    const input = bookingCreateSchema.parse(req.body);
+    const parsed = parseRealDate(input.date);
+    if (!parsed) {
+      return sendError(res, 400, "Invalid date", ErrorCode.VALIDATION_ERROR);
+    }
+
+    // SERIALIZABLE + retry: the availability re-check and the insert see a stable
+    // snapshot, so two concurrent attempts on the same slot cannot both commit —
+    // the loser aborts with a serialization failure, retries, then sees the
+    // winning booking and is rejected as SLOT_TAKEN.
+    const outcome = await withTenant(
+      tenant.id,
+      async (tx) => {
+        const service = await tx.service.findFirst({
+          where: { id: input.serviceId, tenantId: tenant.id, isActive: true },
+          select: { durationMinutes: true },
+        });
+        if (!service) return { error: "SERVICE" as const };
+
+        const schedule = await tx.schedule.findUnique({ where: { tenantId: tenant.id } });
+        if (!schedule) return { error: "NO_SCHEDULE" as const };
+
+        const config = toScheduleConfig(schedule);
+        const { year, month, day } = parsed;
+        const [hour, minute] = input.time.split(":").map(Number);
+        const startsAt = zonedWallTimeToUtc(year, month, day, hour, minute, config.timezone);
+        const endsAt = new Date(startsAt.getTime() + service.durationMinutes * 60 * 1000);
+
+        const dayStart = zonedWallTimeToUtc(year, month, day, 0, 0, config.timezone);
+        const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+        const pad = (config.bufferTime + 60) * 60 * 1000;
+
+        const bookings = await tx.booking.findMany({
+          where: {
+            tenantId: tenant.id,
+            status: { not: "CANCELLED" },
+            startsAt: { lt: new Date(dayEnd.getTime() + pad) },
+            endsAt: { gt: new Date(dayStart.getTime() - pad) },
+          },
+          select: { startsAt: true, endsAt: true },
+        });
+
+        // Re-derive the bookable slots authoritatively on the server: the slot
+        // must be a real, currently-available slot, not just any timestamp the
+        // client posted.
+        const slots = getAvailableSlots({
+          date: input.date,
+          schedule: config,
+          serviceDurationMinutes: service.durationMinutes,
+          existingBookings: bookings,
+        });
+        const match = slots.find((s) => s.startsAt.getTime() === startsAt.getTime());
+
+        if (!match) {
+          const bufferMs = config.bufferTime * 60 * 1000;
+          const conflict = bookings.some(
+            (b) =>
+              startsAt.getTime() < b.endsAt.getTime() + bufferMs &&
+              endsAt.getTime() > b.startsAt.getTime() - bufferMs
+          );
+          return { error: conflict ? ("SLOT_TAKEN" as const) : ("SLOT_INVALID" as const) };
+        }
+
+        const booking = await tx.booking.create({
+          data: {
+            tenantId: tenant.id,
+            serviceId: input.serviceId,
+            customerName: input.customerName,
+            customerEmail: input.customerEmail,
+            customerPhone: input.customerPhone || null,
+            customerNotes: input.customerNotes || null,
+            startsAt,
+            endsAt,
+            status: "PENDING",
+          },
+          select: {
+            id: true,
+            startsAt: true,
+            endsAt: true,
+            cancelToken: true,
+            customerName: true,
+            customerEmail: true,
+            status: true,
+            service: { select: { name: true, durationMinutes: true, price: true } },
+          },
+        });
+
+        return { booking };
+      },
+      { isolationLevel: "Serializable", maxRetries: 5 }
+    );
+
+    if ("error" in outcome) {
+      switch (outcome.error) {
+        case "SERVICE":
+          return sendError(res, 404, "Service not found", ErrorCode.NOT_FOUND);
+        case "NO_SCHEDULE":
+          return sendError(res, 409, "This business is not accepting bookings yet", ErrorCode.CONFLICT);
+        case "SLOT_TAKEN":
+          return sendError(res, 409, "That slot was just taken — please pick another time", ErrorCode.CONFLICT);
+        case "SLOT_INVALID":
+          return sendError(res, 400, "That time is not available", ErrorCode.VALIDATION_ERROR);
+      }
+      // Unreachable (switch is exhaustive) — keeps the type narrowing honest.
+      return sendError(res, 500, "Failed to create booking", ErrorCode.INTERNAL_ERROR);
+    }
+
+    // TODO(F6): trigger confirmation email + .ics asynchronously here. Email is a
+    // non-blocking bonus and must never fail the booking, so it is intentionally
+    // deferred to the email-notifications feature rather than stubbed now.
+
+    res.status(201).json({ data: outcome.booking });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return sendError(res, 400, error.errors[0]?.message ?? "Invalid request", ErrorCode.VALIDATION_ERROR);
+    }
+    if (isOverlapViolation(error)) {
+      return sendError(res, 409, "That slot was just taken — please pick another time", ErrorCode.CONFLICT);
+    }
+    console.error("Public create booking error:", error);
+    sendError(res, 500, "Failed to create booking", ErrorCode.INTERNAL_ERROR);
   }
 });
 
