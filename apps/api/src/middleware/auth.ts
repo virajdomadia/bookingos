@@ -8,6 +8,7 @@ declare global {
         userId: string;
         tenantId: string;
         role: string;
+        email?: string;
         iat?: number;
         exp?: number;
       };
@@ -75,18 +76,11 @@ export const authMiddleware = async (
     req.user = user;
     req.tenantId = user.tenantId;
 
-    // Set RLS context for database queries
-    try {
-      const prisma = (await import("../lib/prisma.js")).default;
-      await prisma.$executeRaw`SELECT set_config('app.tenant_id', ${user.tenantId}, true)`;
-    } catch (error) {
-      console.error("Failed to set RLS context:", error);
-      return res.status(500).json({
-        error: "Failed to establish database context",
-        code: "INTERNAL_ERROR",
-      });
-    }
-
+    // Note: the RLS tenant context is NOT set here. Because Prisma pools
+    // connections, the tenant id must be set on the same connection that runs
+    // the queries — see lib/tenantDb.ts `withTenant`, which wraps set_config +
+    // the queries in one transaction. Setting it here would land on a different
+    // pooled connection and silently do nothing.
     next();
   } catch (error) {
     console.error("Auth middleware error:", error);

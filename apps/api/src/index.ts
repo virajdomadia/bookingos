@@ -1,5 +1,7 @@
 import express, { Express, Request, Response } from "express";
 import cors from "cors";
+import helmet from "helmet";
+import compression from "compression";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import path from "path";
@@ -64,8 +66,14 @@ validateEnvironment();
 const app: Express = express();
 const port = process.env.PORT || 4000;
 
-// Middleware
-app.use(express.json());
+// Behind a reverse proxy (Railway/Vercel/etc.) so req.ip reflects the real
+// client address — required for IP-based rate limiting to work correctly.
+app.set("trust proxy", 1);
+
+// Security & performance middleware
+app.use(helmet());
+app.use(compression());
+app.use(express.json({ limit: "100kb" }));
 app.use(cookieParser());
 app.use(
   cors({

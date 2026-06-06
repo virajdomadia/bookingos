@@ -1,7 +1,7 @@
 # Dependencies
 node_modules/
-pnpm-lock.yaml
 .pnpm-store/
+# NOTE: pnpm-lock.yaml is intentionally committed for reproducible builds.
 
 # Environment
 .env

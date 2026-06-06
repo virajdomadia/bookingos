@@ -32,7 +32,7 @@ model User {
   id           String   @id @default(cuid())
   tenantId     String
   tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  email        String
+  email        String   @unique
   passwordHash String
   role         String   @default("OWNER")
   isSuperAdmin Boolean  @default(false)
@@ -43,7 +43,6 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  @@unique([tenantId, email])
   @@index([tenantId])
 }
 
@@ -80,8 +79,9 @@ model Booking {
   endsAt                  DateTime
   status                  String   @default("PENDING")
   cancelToken             String   @unique @default(cuid())
+  customerNotes           String?
   adminNotes              String?
-  confirmationEmailStatus String   @default("SENT")
+  confirmationEmailStatus String   @default("PENDING")
   reminderSentAt          DateTime?
 
   createdAt               DateTime @default(now())
@@ -89,6 +89,7 @@ model Booking {
 
   @@index([tenantId, startsAt])
   @@index([tenantId, status])
+  @@index([serviceId])
   @@index([cancelToken])
   @@index([reminderSentAt])
 }

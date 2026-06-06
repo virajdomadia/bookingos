@@ -1,9 +1,15 @@
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcrypt";
 
 const prisma = new PrismaClient();
 
+// Dev-only credentials so the seeded tenants are actually loginable.
+const DEMO_PASSWORD = "DemoPass1!";
+
 async function main() {
   console.log("🌱 Seeding database...");
+
+  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
 
   // Create test tenants (let CUID generate IDs)
   const tenant1 = await prisma.tenant.upsert({
@@ -107,10 +113,23 @@ async function main() {
   });
   console.log(`✓ Created ${salonServices.count} services for ${tenant2.name}`);
 
+  // Owner users so the demo tenants can actually be logged into.
+  await prisma.user.upsert({
+    where: { email: "owner@demo-clinic.test" },
+    update: {},
+    create: { tenantId: tenant1.id, email: "owner@demo-clinic.test", passwordHash, role: "OWNER" },
+  });
+  await prisma.user.upsert({
+    where: { email: "owner@test-salon.test" },
+    update: {},
+    create: { tenantId: tenant2.id, email: "owner@test-salon.test", passwordHash, role: "OWNER" },
+  });
+  console.log("✓ Created owner users for both tenants");
+
   console.log("\n✅ Seed complete!");
-  console.log("\n📝 Demo tenants:");
-  console.log(`   - ${tenant1.name}: slug="${tenant1.slug}", id="${tenant1.id}"`);
-  console.log(`   - ${tenant2.name}: slug="${tenant2.slug}", id="${tenant2.id}"`);
+  console.log("\n📝 Demo tenants (login with these):");
+  console.log(`   - ${tenant1.name}: owner@demo-clinic.test / ${DEMO_PASSWORD}`);
+  console.log(`   - ${tenant2.name}: owner@test-salon.test / ${DEMO_PASSWORD}`);
 }
 
 main()

@@ -8,6 +8,7 @@ export interface JWTPayload {
   userId: string;
   tenantId: string;
   role: string;
+  email: string;
 }
 
 export const generateAccessToken = (payload: JWTPayload): string => {
@@ -19,6 +20,15 @@ export const generateAccessToken = (payload: JWTPayload): string => {
 export const generateRefreshToken = (): string => {
   // Opaque refresh token (not a JWT)
   return crypto.randomBytes(32).toString("hex");
+};
+
+/**
+ * Hash a refresh token for storage at rest. The raw token lives only in the
+ * client's httpOnly cookie; the database stores its SHA-256 so a DB leak does
+ * not yield usable tokens. Lookups hash the incoming token and compare.
+ */
+export const hashToken = (token: string): string => {
+  return crypto.createHash("sha256").update(token).digest("hex");
 };
 
 export const generateTokens = (payload: JWTPayload) => {

@@ -1,11 +1,34 @@
 "use client";
 
 import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from "react";
+import { setApiAccessToken, registerAuthHandlers } from "@/lib/api";
 
 interface User {
   userId: string;
   email: string;
   role: string;
+}
+
+/**
+ * Decode the user claims from a JWT access token without verifying the
+ * signature (the server is the source of truth; this is only used to populate
+ * UI state after a silent refresh, which does not return the user object).
+ */
+function decodeUserFromToken(token: string): User | null {
+  try {
+    const payloadSegment = token.split(".")[1];
+    if (!payloadSegment) return null;
+    const json = atob(payloadSegment.replace(/-/g, "+").replace(/_/g, "/"));
+    const payload = JSON.parse(json);
+    if (!payload.userId || !payload.role) return null;
+    return {
+      userId: payload.userId,
+      email: payload.email ?? "",
+      role: payload.role,
+    };
+  } catch {
+    return null;
+  }
 }
 
 interface AuthContextType {
@@ -88,6 +111,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const { accessToken, expiresIn } = data;
 
             setAccessToken(accessToken);
+            // Refresh does not return the user object — recover it from the token
+            // so role-based UI survives a page reload.
+            const decodedUser = decodeUserFromToken(accessToken);
+            if (decodedUser) setUser(decodedUser);
             setError(null);
             refreshRetryCount.current = 0;
 
@@ -135,6 +162,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     [scheduleTokenRefresh]
   );
+
+  // ============================================================================
+  // KEEP THE API LAYER IN SYNC WITH AUTH STATE
+  // ============================================================================
+
+  // Push the current access token into the axios layer so it is attached to
+  // every request.
+  useEffect(() => {
+    setApiAccessToken(accessToken);
+  }, [accessToken]);
+
+  // Let the axios 401-refresh interceptor write a refreshed token back into
+  // React state, and clear the session when refresh ultimately fails.
+  useEffect(() => {
+    registerAuthHandlers({
+      onTokenRefreshed: (token: string) => {
+        setAccessToken(token);
+        const decodedUser = decodeUserFromToken(token);
+        if (decodedUser) setUser(decodedUser);
+      },
+      onAuthFailure: () => {
+        setAccessToken(null);
+        setUser(null);
+      },
+    });
+  }, []);
 
   // ============================================================================
   // INITIAL LOAD - SILENT REFRESH ON MOUNT
