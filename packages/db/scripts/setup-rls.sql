@@ -44,3 +44,18 @@ BEGIN
     );
   END LOOP;
 END $$;
+
+-- ============================================================================
+-- VERIFICATION (uncomment to confirm policies are active after running this)
+-- ============================================================================
+-- Expect rowsecurity = t AND relforcerowsecurity = t for all three tables:
+--
+--   SELECT relname, relrowsecurity, relforcerowsecurity
+--   FROM pg_class
+--   WHERE relname IN ('Service', 'Booking', 'Schedule');
+--
+-- Expect one tenant_isolation policy per table:
+--
+--   SELECT tablename, policyname, cmd
+--   FROM pg_policies
+--   WHERE tablename IN ('Service', 'Booking', 'Schedule');

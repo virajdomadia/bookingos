@@ -126,6 +126,68 @@ async function main() {
   });
   console.log("✓ Created owner users for both tenants");
 
+  // Demo bookings in varied statuses so the admin dashboard (F5) has data to
+  // show. Explicit IDs keep this idempotent (re-running upserts the same rows).
+  // Must run BEFORE setup-rls.sql is applied — these inserts have no tenant
+  // context and RLS would otherwise block them.
+  const dayAt = (offsetDays: number, hour: number) => {
+    const d = new Date();
+    d.setUTCHours(hour, 0, 0, 0);
+    d.setUTCDate(d.getUTCDate() + offsetDays);
+    return d;
+  };
+
+  const seedBookings = async (
+    slug: string,
+    tenantId: string,
+    serviceId: string,
+    durationMinutes: number
+  ) => {
+    const rows: Array<{ n: number; offset: number; hour: number; status: string }> = [
+      { n: 1, offset: 1, hour: 4, status: "CONFIRMED" }, // tomorrow
+      { n: 2, offset: 2, hour: 5, status: "PENDING" },
+      { n: 3, offset: -1, hour: 4, status: "COMPLETED" }, // yesterday
+      { n: 4, offset: 3, hour: 6, status: "CANCELLED" },
+      { n: 5, offset: -2, hour: 8, status: "NO_SHOW" },
+    ];
+    for (const r of rows) {
+      const startsAt = dayAt(r.offset, r.hour);
+      const endsAt = new Date(startsAt.getTime() + durationMinutes * 60 * 1000);
+      const id = `seed-${slug}-${r.n}`;
+      await prisma.booking.upsert({
+        where: { id },
+        update: {},
+        create: {
+          id,
+          tenantId,
+          serviceId,
+          customerName: `Demo Customer ${r.n}`,
+          customerEmail: `customer${r.n}@example.com`,
+          customerPhone: "+919876543210",
+          startsAt,
+          endsAt,
+          status: r.status,
+        },
+      });
+    }
+  };
+
+  const clinicService = await prisma.service.findFirst({
+    where: { tenantId: tenant1.id },
+    orderBy: { createdAt: "asc" },
+  });
+  const salonService = await prisma.service.findFirst({
+    where: { tenantId: tenant2.id },
+    orderBy: { createdAt: "asc" },
+  });
+  if (clinicService) {
+    await seedBookings("demo-clinic", tenant1.id, clinicService.id, clinicService.durationMinutes);
+  }
+  if (salonService) {
+    await seedBookings("test-salon", tenant2.id, salonService.id, salonService.durationMinutes);
+  }
+  console.log("✓ Created demo bookings (varied statuses) for both tenants");
+
   console.log("\n✅ Seed complete!");
   console.log("\n📝 Demo tenants (login with these):");
   console.log(`   - ${tenant1.name}: owner@demo-clinic.test / ${DEMO_PASSWORD}`);

@@ -36,7 +36,34 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Response interceptor: on 401, attempt a single silent refresh, then retry.
+// Single-flight refresh: the server ROTATES the refresh token on every call, so
+// if several requests 401 at once and each fires its own /auth/refresh, only the
+// first rotation succeeds and the rest get 401 → spurious logout. Sharing one
+// in-flight promise makes concurrent 401s await the same refresh.
+let refreshPromise: Promise<string> | null = null;
+
+function refreshAccessToken(): Promise<string> {
+  if (!refreshPromise) {
+    refreshPromise = axios
+      .post(`${API_URL}/auth/refresh`, {}, { withCredentials: true })
+      .then((res) => {
+        // Server envelope is { data: { accessToken, expiresIn } }.
+        const accessToken: string | undefined = res.data?.data?.accessToken;
+        if (!accessToken) {
+          throw new Error("Refresh response did not contain an access token");
+        }
+        currentAccessToken = accessToken;
+        onTokenRefreshed?.(accessToken);
+        return accessToken;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
+
+// Response interceptor: on 401, attempt a single shared refresh, then retry.
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -46,21 +73,7 @@ api.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        const { data } = await axios.post(
-          `${API_URL}/auth/refresh`,
-          {},
-          { withCredentials: true }
-        );
-
-        // Server envelope is { data: { accessToken, expiresIn } }.
-        const accessToken: string | undefined = data?.data?.accessToken;
-        if (!accessToken) {
-          throw new Error("Refresh response did not contain an access token");
-        }
-
-        currentAccessToken = accessToken;
-        onTokenRefreshed?.(accessToken);
-
+        const accessToken = await refreshAccessToken();
         originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         return api(originalRequest);
       } catch (refreshError) {

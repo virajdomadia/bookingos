@@ -1,9 +1,10 @@
 import { Router, Request, Response } from "express";
 import type { Router as ExpressRouter } from "express";
+import { Prisma } from "@prisma/client";
 import { z, ZodError } from "zod";
 import rateLimit from "express-rate-limit";
 import { generateTokens, hashToken } from "../utils/jwt.js";
-import { hashPassword, verifyPassword, validatePassword } from "../utils/password.js";
+import { hashPassword, verifyPassword, validatePassword, DUMMY_PASSWORD_HASH } from "../utils/password.js";
 import prisma from "../lib/prisma.js";
 import { ApiError, AuthResponse, ErrorCode } from "../types/api.js";
 
@@ -213,6 +214,18 @@ router.post("/register", authLimiter, async (req: Request, res: Response) => {
       return sendError(res, 400, firstError.message, ErrorCode.VALIDATION_ERROR);
     }
 
+    // The pre-checks above have a TOCTOU window: a concurrent register can take
+    // the same slug/email between the check and the insert. The unique
+    // constraint is the real guard — translate it into the right 409 instead of
+    // a generic 500.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const target = (error.meta?.target as string[] | string | undefined) ?? "";
+      const onEmail = Array.isArray(target) ? target.includes("email") : String(target).includes("email");
+      return onEmail
+        ? sendError(res, 409, "Email is already registered", ErrorCode.EMAIL_TAKEN)
+        : sendError(res, 409, "This business name is already taken", ErrorCode.SLUG_TAKEN);
+    }
+
     console.error("Register error:", error);
     sendError(res, 500, "Registration failed. Please try again.", ErrorCode.INTERNAL_ERROR);
   }
@@ -233,18 +246,18 @@ router.post("/login", authLimiter, async (req: Request, res: Response) => {
       include: { tenant: true },
     });
 
-    if (!user) {
+    // Always run a bcrypt comparison — against a dummy hash when the email is
+    // unknown — so response time is identical whether or not the email exists
+    // (no timing-based email enumeration).
+    const passwordMatch = await verifyPassword(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
+    if (!user || !passwordMatch) {
       return sendError(res, 401, "Invalid credentials", ErrorCode.INVALID_CREDENTIALS);
     }
 
+    // Only reveal deactivation AFTER the password is proven correct, so the
+    // distinct 403 can't be used to probe which emails are registered.
     if (!user.isActive || !user.tenant.isActive) {
       return sendError(res, 403, "Account is deactivated. Please contact support.", ErrorCode.FORBIDDEN);
-    }
-
-    // Verify password
-    const passwordMatch = await verifyPassword(password, user.passwordHash);
-    if (!passwordMatch) {
-      return sendError(res, 401, "Invalid credentials", ErrorCode.INVALID_CREDENTIALS);
     }
 
     // Generate tokens

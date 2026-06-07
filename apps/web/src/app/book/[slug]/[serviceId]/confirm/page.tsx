@@ -3,15 +3,17 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
+import { CheckIcon, CalendarPlusIcon } from "lucide-react";
 import type { CreatedBooking, PublicTenant } from "@/lib/publicApi";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BookingShell } from "../../../_components/BookingShell";
 
 /** Format an ISO instant in the given IANA timezone as a friendly date + time. */
 function formatInstant(iso: string, timezone: string): string {
   const d = new Date(iso);
-  const parts = new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat("en-GB", {
     timeZone: timezone,
     weekday: "long",
     day: "numeric",
@@ -21,7 +23,14 @@ function formatInstant(iso: string, timezone: string): string {
     minute: "2-digit",
     hour12: true,
   }).format(d);
-  return parts;
+}
+
+function SuccessMark() {
+  return (
+    <div className="mx-auto mb-5 flex size-16 animate-scale-in items-center justify-center rounded-full bg-success/15 text-success ring-8 ring-success/5">
+      <CheckIcon className="size-8" strokeWidth={3} />
+    </div>
+  );
 }
 
 function ConfirmContent() {
@@ -33,15 +42,9 @@ function ConfirmContent() {
   const [missing, setMissing] = useState(false);
 
   useEffect(() => {
-    if (!id) {
-      setMissing(true);
-      return;
-    }
+    if (!id) return setMissing(true);
     const raw = sessionStorage.getItem(`booking:${id}`);
-    if (!raw) {
-      setMissing(true);
-      return;
-    }
+    if (!raw) return setMissing(true);
     try {
       setData(JSON.parse(raw));
     } catch {
@@ -52,11 +55,9 @@ function ConfirmContent() {
   if (missing || !data) {
     return (
       <BookingShell>
-        <div className="py-12 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-2xl text-green-600">
-            ✓
-          </div>
-          <h1 className="text-xl font-bold text-gray-900">Booking confirmed</h1>
+        <div className="py-10 text-center">
+          <SuccessMark />
+          <h1 className="font-heading text-xl font-semibold text-foreground">Booking confirmed</h1>
           <p className="mt-2 text-muted-foreground">
             Your appointment has been booked. Check your email for the details.
           </p>
@@ -69,46 +70,49 @@ function ConfirmContent() {
   }
 
   const { booking, tenant } = data;
-  // Render the instant in the tenant's own timezone so the time matches what the
-  // customer picked, regardless of the device's locale.
   const timezone = tenant?.timezone ?? "Asia/Kolkata";
 
   return (
     <BookingShell tenant={tenant ?? undefined}>
       <div className="py-6 text-center">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-2xl text-green-600">
-          ✓
-        </div>
-        <h1 className="text-xl font-bold text-gray-900">You&apos;re booked!</h1>
-        <p className="mt-1 text-muted-foreground">A confirmation has been sent to {booking.customerEmail}.</p>
+        <SuccessMark />
+        <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground">
+          You&apos;re booked!
+        </h1>
+        <p className="mt-1.5 text-sm text-muted-foreground">
+          A confirmation has been sent to{" "}
+          <span className="font-medium text-foreground">{booking.customerEmail}</span>.
+        </p>
       </div>
 
       <Card>
-        <CardContent className="space-y-3 p-4 text-sm">
+        <CardContent className="space-y-3 text-sm">
           <Row label="Service" value={booking.service.name} />
           <Row label="When" value={formatInstant(booking.startsAt, timezone)} />
           <Row label="Duration" value={`${booking.service.durationMinutes} min`} />
           <Row label="Name" value={booking.customerName} />
-          <Row
-            label="Status"
-            value={
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                Awaiting confirmation
-              </span>
-            }
-          />
+          <div className="flex items-center justify-between gap-4 border-t border-border pt-3">
+            <span className="text-muted-foreground">Status</span>
+            <Badge variant="warning">Awaiting confirmation</Badge>
+          </div>
         </CardContent>
       </Card>
+
+      <div className="mt-5 space-y-2.5">
+        <Button variant="outline" className="w-full" disabled>
+          <CalendarPlusIcon className="size-4" />
+          Add to calendar
+        </Button>
+        <Link href={`/book/${slug}`} className="block">
+          <Button variant="ghost" className="w-full">
+            Book another appointment
+          </Button>
+        </Link>
+      </div>
 
       <p className="mt-4 text-center text-xs text-muted-foreground">
         Need to cancel? Use the link in your confirmation email.
       </p>
-
-      <Link href={`/book/${slug}`} className="mt-6 block">
-        <Button variant="outline" className="w-full">
-          Book another appointment
-        </Button>
-      </Link>
     </BookingShell>
   );
 }
@@ -117,14 +121,20 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4">
       <span className="text-muted-foreground">{label}</span>
-      <span className="text-right font-medium text-gray-900">{value}</span>
+      <span className="text-right font-medium text-foreground">{value}</span>
     </div>
   );
 }
 
 export default function ConfirmPage() {
   return (
-    <Suspense fallback={<BookingShell><p className="text-center text-muted-foreground py-12">Loading…</p></BookingShell>}>
+    <Suspense
+      fallback={
+        <BookingShell>
+          <p className="py-12 text-center text-muted-foreground">Loading…</p>
+        </BookingShell>
+      }
+    >
       <ConfirmContent />
     </Suspense>
   );

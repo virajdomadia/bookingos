@@ -1,19 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
+import {
+  CalendarDaysIcon,
+  SettingsIcon,
+  SlidersHorizontalIcon,
+  UsersIcon,
+  CalendarClockIcon,
+  CalendarCheck2Icon,
+  ClockIcon,
+  ChevronRightIcon,
+} from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-
-interface Tenant {
-  name: string;
-  slug: string;
-  primaryColor: string;
-}
+import { Skeleton } from "@/components/ui/skeleton";
+import { AdminShell } from "./_components/AdminShell";
 
 interface Stats {
   today: number;
@@ -21,129 +25,98 @@ interface Stats {
   pending: number;
 }
 
-interface NavItem {
-  href: string;
-  label: string;
-  icon: string;
-  description: string;
-  comingSoon?: boolean;
-}
+const KPIS = [
+  { key: "today" as const, label: "Today's bookings", icon: CalendarClockIcon, tone: "text-info" },
+  { key: "thisWeek" as const, label: "This week", icon: CalendarCheck2Icon, tone: "text-primary" },
+  { key: "pending" as const, label: "Awaiting confirmation", icon: ClockIcon, tone: "text-warning-foreground" },
+];
 
-const NAV_ITEMS: NavItem[] = [
-  { href: "/admin/schedule", label: "Schedule & Branding", icon: "📋", description: "Working hours, breaks, timezone, logo" },
-  { href: "/admin/services", label: "Services", icon: "⚙️", description: "Manage your bookable services" },
-  { href: "/admin/bookings", label: "Bookings", icon: "📅", description: "View and manage appointments" },
-  { href: "/admin/staff", label: "Staff", icon: "👥", description: "Manage team members and roles", comingSoon: true },
+const NAV_ITEMS = [
+  { href: "/admin/bookings", label: "Bookings", icon: CalendarDaysIcon, description: "View and manage appointments" },
+  { href: "/admin/services", label: "Services", icon: SettingsIcon, description: "Your bookable services and pricing" },
+  { href: "/admin/schedule", label: "Schedule & Branding", icon: SlidersHorizontalIcon, description: "Hours, breaks, timezone, logo" },
+  { href: "/admin/staff", label: "Staff", icon: UsersIcon, description: "Team members and roles", comingSoon: true },
 ];
 
 export default function AdminDashboard() {
-  const router = useRouter();
-  const { accessToken, user, isLoading, logout } = useAuth();
-  const [tenant, setTenant] = useState<Tenant | null>(null);
+  const { accessToken, user } = useAuth();
   const [stats, setStats] = useState<Stats | null>(null);
 
   useEffect(() => {
-    if (!isLoading && !accessToken) router.push("/auth");
-  }, [accessToken, isLoading, router]);
-
-  useEffect(() => {
     if (!accessToken) return;
-    api.get("/admin/tenant").then((res) => setTenant(res.data.data)).catch(() => null);
     api.get("/admin/stats").then((res) => setStats(res.data.data)).catch(() => null);
   }, [accessToken]);
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      router.push("/auth");
-    } catch (err) {
-      console.error("Logout error:", err);
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
-      </div>
-    );
-  }
-
-  if (!accessToken || !user) return null;
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-border px-6 py-4 flex justify-between items-center">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">{tenant?.name || "Admin Dashboard"}</h1>
-          {tenant && (
-            <p className="text-xs text-muted-foreground mt-0.5">/book/{tenant.slug}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground hidden sm:block">{user.email}</span>
-          <Button variant="destructive" size="sm" onClick={handleLogout}>
-            Logout
-          </Button>
-        </div>
-      </header>
-
-      <main className="max-w-4xl mx-auto px-4 py-6 space-y-5">
-        {/* KPI strip */}
-        <div className="grid grid-cols-3 gap-4">
-          {[
-            { label: "Today's Bookings", value: stats?.today },
-            { label: "This Week", value: stats?.thisWeek },
-            { label: "Pending", value: stats?.pending },
-          ].map(({ label, value }) => (
-            <Card key={label}>
-              <CardContent className="pt-5 pb-4 text-center">
-                <div className="text-3xl font-bold text-gray-900">
-                  {value === undefined ? "—" : value}
-                </div>
-                <div className="text-xs text-muted-foreground mt-1 uppercase tracking-wide">{label}</div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {/* Navigation grid */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {NAV_ITEMS.map(({ href, label, icon, description, comingSoon }) =>
-            comingSoon ? (
-              <div
-                key={href}
-                className="bg-white rounded-lg border border-border p-5 opacity-50 cursor-default flex flex-col gap-1.5"
-              >
-                <span className="text-2xl">{icon}</span>
-                <p className="font-semibold text-gray-900 text-sm">{label}</p>
-                <p className="text-xs text-muted-foreground leading-snug">{description}</p>
-                <Badge variant="secondary" className="w-fit mt-1 text-xs">Coming soon</Badge>
+    <AdminShell active="dashboard" title="Dashboard">
+      {/* KPI strip */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {KPIS.map(({ key, label, icon: Icon, tone }) => (
+          <Card key={key}>
+            <CardContent className="flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {label}
+                </p>
+                {stats ? (
+                  <p className="font-heading text-3xl font-semibold text-foreground">{stats[key]}</p>
+                ) : (
+                  <Skeleton className="h-9 w-12" />
+                )}
               </div>
-            ) : (
-              <Link
-                key={href}
-                href={href}
-                className="bg-white rounded-lg border border-border p-5 flex flex-col gap-1.5 no-underline hover:shadow-sm transition-shadow"
-              >
-                <span className="text-2xl">{icon}</span>
-                <p className="font-semibold text-gray-900 text-sm">{label}</p>
-                <p className="text-xs text-muted-foreground leading-snug">{description}</p>
-              </Link>
-            )
-          )}
-        </div>
+              <span className="flex size-10 items-center justify-center rounded-lg bg-muted">
+                <Icon className={`size-5 ${tone}`} />
+              </span>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
-        {/* Role pill */}
-        <Card>
-          <CardContent className="py-3 flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Signed in as</span>
-            <Badge className="bg-violet-100 text-violet-700 hover:bg-violet-100 border-0">
-              {user.role}
-            </Badge>
-          </CardContent>
-        </Card>
-      </main>
-    </div>
+      {/* Navigation grid */}
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {NAV_ITEMS.map(({ href, label, icon: Icon, description, comingSoon }) =>
+          comingSoon ? (
+            <div
+              key={href}
+              className="flex items-start gap-4 rounded-xl border border-dashed border-border bg-card/50 p-5"
+            >
+              <span className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                <Icon className="size-5" />
+              </span>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <p className="font-medium text-foreground">{label}</p>
+                  <Badge variant="secondary">Coming soon</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">{description}</p>
+              </div>
+            </div>
+          ) : (
+            <Link
+              key={href}
+              href={href}
+              className="group flex items-start gap-4 rounded-xl border border-border bg-card p-5 shadow-xs transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
+            >
+              <span className="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+                <Icon className="size-5" />
+              </span>
+              <div className="flex-1 space-y-1">
+                <p className="font-medium text-foreground">{label}</p>
+                <p className="text-sm text-muted-foreground">{description}</p>
+              </div>
+              <ChevronRightIcon className="size-5 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
+            </Link>
+          )
+        )}
+      </div>
+
+      {/* Role pill */}
+      {user && (
+        <p className="mt-6 text-sm text-muted-foreground">
+          Signed in as <span className="font-medium text-foreground">{user.email}</span>
+          <Badge variant="info" className="ml-2">{user.role}</Badge>
+        </p>
+      )}
+    </AdminShell>
   );
 }

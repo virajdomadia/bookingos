@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { ClockIcon, ChevronRightIcon, CalendarX2Icon } from "lucide-react";
 import { getBookingPage, PublicApiError, type BookingPage } from "@/lib/publicApi";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { BookingShell } from "../_components/BookingShell";
 
 export default function ServiceListPage() {
@@ -41,8 +42,12 @@ export default function ServiceListPage() {
 
   if (loading) {
     return (
-      <BookingShell>
-        <p className="text-center text-muted-foreground py-12">Loading…</p>
+      <BookingShell step="Choose a service">
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-[72px] w-full rounded-xl" />
+          ))}
+        </div>
       </BookingShell>
     );
   }
@@ -50,43 +55,63 @@ export default function ServiceListPage() {
   if (error || !page) {
     return (
       <BookingShell>
-        <p className="text-center text-muted-foreground py-12">{error || "Not found."}</p>
+        <div className="flex flex-col items-center gap-3 py-16 text-center">
+          <div className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <CalendarX2Icon className="size-6" />
+          </div>
+          <p className="font-medium text-foreground">{error || "Not found."}</p>
+        </div>
       </BookingShell>
     );
   }
 
+  const accent = page.tenant?.primaryColor ?? "#4F46E5";
+
   return (
     <BookingShell tenant={page.tenant} step="Choose a service">
       {page.services.length === 0 ? (
-        <p className="text-center text-muted-foreground py-12">
-          No services are available to book right now.
-        </p>
+        <div className="flex flex-col items-center gap-3 py-16 text-center">
+          <div className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <CalendarX2Icon className="size-6" />
+          </div>
+          <p className="font-medium text-foreground">Nothing to book yet</p>
+          <p className="max-w-xs text-sm text-muted-foreground">
+            This business hasn&apos;t published any services. Please check back soon.
+          </p>
+        </div>
       ) : (
-        <div className="space-y-3">
+        <ul className="space-y-3">
           {page.services.map((service) => (
-            <Card
-              key={service.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => router.push(`/book/${slug}/${service.id}/date`)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") router.push(`/book/${slug}/${service.id}/date`);
-              }}
-              className="cursor-pointer transition-colors hover:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              <CardContent className="flex items-center justify-between gap-4 p-4">
-                <div className="space-y-1.5">
-                  <p className="font-semibold text-gray-900">{service.name}</p>
-                  <div className="flex gap-1.5 flex-wrap">
-                    <Badge variant="secondary">{service.durationMinutes} min</Badge>
-                    {service.price > 0 && <Badge variant="secondary">₹{service.price.toFixed(0)}</Badge>}
+            <li key={service.id}>
+              <button
+                type="button"
+                onClick={() => router.push(`/book/${slug}/${service.id}/date`)}
+                className="group flex w-full items-center gap-4 rounded-xl border border-border bg-card p-4 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                <span
+                  className="flex size-11 shrink-0 items-center justify-center rounded-lg text-base font-semibold text-white"
+                  style={{ backgroundColor: accent }}
+                  aria-hidden
+                >
+                  {service.name.charAt(0).toUpperCase()}
+                </span>
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <p className="truncate font-medium text-foreground">{service.name}</p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Badge variant="secondary" className="gap-1">
+                      <ClockIcon className="size-3" />
+                      {service.durationMinutes} min
+                    </Badge>
+                    {service.price > 0 && (
+                      <Badge variant="secondary">₹{service.price.toFixed(0)}</Badge>
+                    )}
                   </div>
                 </div>
-                <span aria-hidden className="text-muted-foreground text-xl">›</span>
-              </CardContent>
-            </Card>
+                <ChevronRightIcon className="size-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
+              </button>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </BookingShell>
   );

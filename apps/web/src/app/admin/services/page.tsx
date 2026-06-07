@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { PlusIcon, PencilIcon, ClockIcon, CheckIcon } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -10,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Dialog,
@@ -19,6 +19,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { AdminShell } from "../_components/AdminShell";
 
 interface Service {
   id: string;
@@ -33,8 +34,7 @@ type FormMode = "create" | "edit";
 const emptyForm = { name: "", durationMinutes: 30, price: 0, isStaffService: false };
 
 export default function ServicesPage() {
-  const router = useRouter();
-  const { accessToken, isLoading } = useAuth();
+  const { accessToken } = useAuth();
 
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,10 +47,6 @@ export default function ServicesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isLoading && !accessToken) router.push("/auth");
-  }, [accessToken, isLoading, router]);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -148,60 +144,47 @@ export default function ServicesPage() {
     }
   };
 
-  if (isLoading || loading) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <header className="bg-white border-b border-border px-6 py-4 flex items-center gap-4">
-          <Link href="/admin" className="text-sm text-primary hover:underline">← Dashboard</Link>
-          <h1 className="text-xl font-bold text-gray-900">Services</h1>
-        </header>
-        <div className="flex items-center justify-center pt-16 text-muted-foreground">
-          Loading services...
-        </div>
-      </div>
-    );
-  }
-
-  if (!accessToken) return null;
-
   const activeServices = services.filter((s) => s.isActive);
   const inactiveServices = services.filter((s) => !s.isActive);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-border px-6 py-4 flex justify-between items-center">
-        <div className="flex items-center gap-4">
-          <Link href="/admin" className="text-sm text-primary hover:underline">← Dashboard</Link>
-          <h1 className="text-xl font-bold text-gray-900">Services</h1>
-        </div>
-        <Button onClick={openCreate}>+ New Service</Button>
-      </header>
-
-      <main className="max-w-4xl mx-auto px-4 py-6 space-y-4">
+    <AdminShell
+      active="services"
+      title="Services"
+      actions={
+        <Button onClick={openCreate}>
+          <PlusIcon className="size-4" />
+          New service
+        </Button>
+      }
+    >
+      <div className="space-y-4">
         {error && (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
+          <Alert variant="destructive" className="border-destructive/30 bg-destructive/5">
+            <AlertDescription className="text-destructive/90">{error}</AlertDescription>
           </Alert>
         )}
         {success && (
-          <Alert className="border-green-200 bg-green-50 text-green-800">
-            <AlertDescription>{success}</AlertDescription>
+          <Alert className="border-success/30 bg-success/10">
+            <AlertDescription className="flex items-center gap-1.5 text-success">
+              <CheckIcon className="size-4" />
+              {success}
+            </AlertDescription>
           </Alert>
         )}
 
-        {/* Create / Edit Form */}
+        {/* Create / Edit form */}
         {showForm && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">
-                {formMode === "create" ? "New Service" : "Edit Service"}
-              </CardTitle>
+          <Card className="animate-fade-in-up">
+            <CardHeader>
+              <CardTitle>{formMode === "create" ? "New service" : "Edit service"}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="space-y-1.5 sm:col-span-1">
-                  <Label>Service Name *</Label>
+                  <Label htmlFor="svc-name">Service name *</Label>
                   <Input
+                    id="svc-name"
                     type="text"
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -210,8 +193,9 @@ export default function ServicesPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Duration (minutes) *</Label>
+                  <Label htmlFor="svc-duration">Duration (minutes) *</Label>
                   <Input
+                    id="svc-duration"
                     type="number"
                     value={form.durationMinutes}
                     onChange={(e) => setForm({ ...form, durationMinutes: Number(e.target.value) })}
@@ -221,8 +205,9 @@ export default function ServicesPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Price (₹)</Label>
+                  <Label htmlFor="svc-price">Price (₹)</Label>
                   <Input
+                    id="svc-price"
                     type="number"
                     value={form.price}
                     onChange={(e) => setForm({ ...form, price: Number(e.target.value) })}
@@ -232,26 +217,23 @@ export default function ServicesPage() {
                 </div>
               </div>
 
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="flex cursor-pointer items-center gap-2">
                 <input
                   type="checkbox"
                   checked={form.isStaffService}
                   onChange={(e) => setForm({ ...form, isStaffService: e.target.checked })}
-                  className="w-4 h-4 rounded border-gray-300"
+                  className="size-4 rounded border-border accent-primary"
                 />
-                <span className="text-sm text-gray-700">
+                <span className="text-sm text-foreground">
                   Staff service (assigned to a specific staff member)
                 </span>
               </label>
 
               <div className="flex gap-2 pt-1">
                 <Button onClick={submitForm} disabled={saving}>
-                  {saving ? "Saving..." : formMode === "create" ? "Create Service" : "Save Changes"}
+                  {saving ? "Saving…" : formMode === "create" ? "Create service" : "Save changes"}
                 </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => { setShowForm(false); setError(""); }}
-                >
+                <Button variant="outline" onClick={() => { setShowForm(false); setError(""); }}>
                   Cancel
                 </Button>
               </div>
@@ -259,72 +241,74 @@ export default function ServicesPage() {
           </Card>
         )}
 
-        {/* Active Services */}
+        {/* Active services */}
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Active Services ({activeServices.length})</CardTitle>
+          <CardHeader>
+            <CardTitle className="text-base">Active services ({activeServices.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            {activeServices.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No active services. Create your first service above.
+            {loading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-16 w-full rounded-lg" />
+                ))}
+              </div>
+            ) : activeServices.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                No active services yet. Create your first one.
               </p>
             ) : (
-              <div className="space-y-2">
+              <ul className="space-y-2">
                 {activeServices.map((service) => (
-                  <div
+                  <li
                     key={service.id}
-                    className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-border"
+                    className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-3"
                   >
-                    <div className="space-y-1">
-                      <p className="font-semibold text-gray-900 text-sm">{service.name}</p>
-                      <div className="flex gap-1.5 flex-wrap">
-                        <Badge variant="secondary">{service.durationMinutes} min</Badge>
+                    <div className="min-w-0 space-y-1.5">
+                      <p className="truncate font-medium text-foreground">{service.name}</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        <Badge variant="secondary" className="gap-1">
+                          <ClockIcon className="size-3" />
+                          {service.durationMinutes} min
+                        </Badge>
                         <Badge variant="secondary">₹{service.price.toFixed(0)}</Badge>
-                        {service.isStaffService && (
-                          <Badge className="bg-violet-100 text-violet-700 hover:bg-violet-100 border-0">
-                            Staff service
-                          </Badge>
-                        )}
+                        {service.isStaffService && <Badge variant="info">Staff service</Badge>}
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex shrink-0 gap-2">
                       <Button variant="outline" size="sm" onClick={() => openEdit(service)}>
+                        <PencilIcon className="size-3.5" />
                         Edit
                       </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => setConfirmDelete(service.id)}
-                      >
+                      <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(service.id)}>
                         Deactivate
                       </Button>
                     </div>
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </CardContent>
         </Card>
 
-        {/* Inactive Services */}
+        {/* Inactive services */}
         {inactiveServices.length > 0 && (
           <Card>
-            <CardHeader className="pb-3">
+            <CardHeader>
               <CardTitle className="text-base text-muted-foreground">
-                Inactive Services ({inactiveServices.length})
+                Inactive services ({inactiveServices.length})
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
+              <ul className="space-y-2">
                 {inactiveServices.map((service) => (
-                  <div
+                  <li
                     key={service.id}
-                    className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-border opacity-60"
+                    className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 p-3"
                   >
-                    <div className="space-y-1">
-                      <p className="font-semibold text-gray-900 text-sm line-through">{service.name}</p>
-                      <div className="flex gap-1.5 flex-wrap">
+                    <div className="min-w-0 space-y-1.5">
+                      <p className="truncate font-medium text-muted-foreground line-through">{service.name}</p>
+                      <div className="flex flex-wrap gap-1.5">
                         <Badge variant="secondary">{service.durationMinutes} min</Badge>
                         <Badge variant="secondary">₹{service.price.toFixed(0)}</Badge>
                       </div>
@@ -332,22 +316,22 @@ export default function ServicesPage() {
                     <Button variant="outline" size="sm" onClick={() => toggleActive(service)}>
                       Reactivate
                     </Button>
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </CardContent>
           </Card>
         )}
-      </main>
+      </div>
 
-      {/* Deactivate Confirmation Dialog */}
+      {/* Deactivate confirmation */}
       <Dialog
         open={confirmDelete !== null}
         onOpenChange={(open: boolean) => { if (!open) setConfirmDelete(null); }}
       >
         <DialogContent showCloseButton={false}>
           <DialogHeader>
-            <DialogTitle>Deactivate Service?</DialogTitle>
+            <DialogTitle>Deactivate service?</DialogTitle>
             <DialogDescription>
               This service will be hidden from the public booking page. Existing bookings are not
               affected. You can reactivate it later.
@@ -357,15 +341,12 @@ export default function ServicesPage() {
             <Button variant="outline" onClick={() => setConfirmDelete(null)}>
               Cancel
             </Button>
-            <Button
-              variant="destructive"
-              onClick={() => confirmDelete && deleteService(confirmDelete)}
-            >
-              Yes, Deactivate
+            <Button variant="destructive" onClick={() => confirmDelete && deleteService(confirmDelete)}>
+              Yes, deactivate
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </AdminShell>
   );
 }

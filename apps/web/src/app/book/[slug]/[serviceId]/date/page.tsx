@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { ChevronLeftIcon, ChevronRightIcon, ClockIcon } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { BookingShell } from "../../../_components/BookingShell";
 import { useBookingContext } from "../../../_components/useBookingContext";
+import { cn } from "@/lib/utils";
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 const MONTHS = [
@@ -39,15 +41,16 @@ export default function DatePickerPage() {
 
   if (loading) {
     return (
-      <BookingShell tenant={tenant ?? undefined} step="Pick a date">
-        <p className="text-center text-muted-foreground py-12">Loading…</p>
+      <BookingShell tenant={tenant ?? undefined} step="Pick a date" backHref={`/book/${slug}`}>
+        <Skeleton className="mb-4 h-7 w-40" />
+        <Skeleton className="h-[340px] w-full rounded-xl" />
       </BookingShell>
     );
   }
   if (error || serviceNotFound) {
     return (
       <BookingShell tenant={tenant ?? undefined} backHref={`/book/${slug}`}>
-        <p className="text-center text-muted-foreground py-12">
+        <p className="py-12 text-center text-muted-foreground">
           {error || "That service is no longer available."}
         </p>
       </BookingShell>
@@ -58,28 +61,35 @@ export default function DatePickerPage() {
     <BookingShell tenant={tenant ?? undefined} step="Pick a date" backHref={`/book/${slug}`}>
       {service && (
         <div className="mb-4 flex items-center gap-2">
-          <span className="font-medium text-gray-900">{service.name}</span>
-          <Badge variant="secondary">{service.durationMinutes} min</Badge>
+          <span className="font-medium text-foreground">{service.name}</span>
+          <Badge variant="secondary" className="gap-1">
+            <ClockIcon className="size-3" />
+            {service.durationMinutes} min
+          </Badge>
         </div>
       )}
 
       <Card>
-        <CardContent className="p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <Button variant="outline" size="sm" disabled={atCurrentMonth} onClick={() => changeMonth(-1)}>
-              ‹
+        <CardContent>
+          <div className="mb-4 flex items-center justify-between">
+            <Button
+              aria-label="Previous month"
+              disabled={atCurrentMonth}
+              onClick={() => changeMonth(-1)}
+            >
+              <ChevronLeftIcon className="size-4" />
             </Button>
-            <span className="font-semibold text-gray-900">
+            <span className="font-heading font-semibold text-foreground">
               {MONTHS[view.month]} {view.year}
             </span>
-            <Button variant="outline" size="sm" onClick={() => changeMonth(1)}>
-              ›
+            <Button aria-label="Next month" onClick={() => changeMonth(1)}>
+              <ChevronRightIcon className="size-4" />
             </Button>
           </div>
 
           <div className="grid grid-cols-7 gap-1 text-center">
             {WEEKDAYS.map((w) => (
-              <div key={w} className="py-1 text-xs font-medium text-muted-foreground">
+              <div key={w} className="py-1 text-xs font-semibold text-muted-foreground">
                 {w}
               </div>
             ))}
@@ -90,18 +100,23 @@ export default function DatePickerPage() {
               const day = i + 1;
               const cellDate = new Date(view.year, view.month, day);
               const isPast = cellDate < today;
+              const isToday =
+                atCurrentMonth && day === today.getDate();
               return (
                 <button
                   key={day}
                   type="button"
                   disabled={isPast}
-                  onClick={() => router.push(`/book/${slug}/${serviceId}/slots?date=${toISO(view.year, view.month, day)}`)}
-                  className={
-                    "aspect-square rounded-md text-sm transition-colors " +
-                    (isPast
-                      ? "cursor-not-allowed text-gray-300"
-                      : "text-gray-900 hover:bg-primary hover:text-primary-foreground focus:outline-none focus:ring-2 focus:ring-primary")
+                  onClick={() =>
+                    router.push(`/book/${slug}/${serviceId}/slots?date=${toISO(view.year, view.month, day)}`)
                   }
+                  className={cn(
+                    "relative flex aspect-square items-center justify-center rounded-lg text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                    isPast
+                      ? "cursor-not-allowed text-muted-foreground/40"
+                      : "text-foreground hover:bg-primary hover:text-primary-foreground",
+                    isToday && !isPast && "ring-1 ring-inset ring-primary/40"
+                  )}
                 >
                   {day}
                 </button>
@@ -110,6 +125,27 @@ export default function DatePickerPage() {
           </div>
         </CardContent>
       </Card>
+
+      <p className="mt-4 text-center text-xs text-muted-foreground">
+        Pick a day to see available times.
+      </p>
     </BookingShell>
+  );
+}
+
+// Local icon-button used for month navigation (outline, square, comfortable tap target).
+function Button({
+  className,
+  ...props
+}: React.ComponentProps<"button">) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "flex size-9 items-center justify-center rounded-lg border border-border bg-background text-foreground shadow-xs transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+        className
+      )}
+      {...props}
+    />
   );
 }

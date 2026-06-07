@@ -12,6 +12,7 @@ import {
 } from "../lib/availability.js";
 import { availabilityQuerySchema, bookingCreateSchema } from "../lib/validators.js";
 import { ApiError, ErrorCode } from "../types/api.js";
+import { sendBookingReceived, sendAdminNewBooking } from "../lib/email.js";
 
 const router: ExpressRouter = Router();
 
@@ -24,10 +25,12 @@ const publicLimiter = rateLimit({
   keyGenerator: (req) => req.ip || "unknown",
 });
 
-// Tighter limit on booking creation specifically — it writes and sends email.
+// Tight limit on booking creation specifically — it writes, sends email, and
+// has no captcha/verification, so a loose cap lets one IP flood a tenant's
+// future calendar with fake PENDING bookings (calendar-stuffing DoS).
 const bookingLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 10,
+  windowMs: 60 * 60 * 1000,
+  max: 15,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => req.ip || "unknown",
@@ -78,6 +81,22 @@ const parseRealDate = (date: string): { year: number; month: number; day: number
     return null;
   }
   return { year, month, day };
+};
+
+// How far ahead a slot may be queried/booked. Without this the engine happily
+// generates slots for any valid date (e.g. year 2099), letting a client fill the
+// calendar arbitrarily far out. A generous bound keeps it sane.
+const MAX_BOOKING_HORIZON_DAYS = 365;
+
+/** True if y/m/d is today or within the booking horizon (timezone-agnostic sanity bound). */
+const isWithinHorizon = (year: number, month: number, day: number): boolean => {
+  const target = Date.UTC(year, month - 1, day);
+  const now = new Date();
+  const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const daysAhead = (target - todayUtc) / (24 * 60 * 60 * 1000);
+  // Allow a 1-day slack on the lower side for timezone edges; past dates that
+  // slip through still produce no bookable slots downstream.
+  return daysAhead >= -1 && daysAhead <= MAX_BOOKING_HORIZON_DAYS;
 };
 
 /** Normalize a persisted Schedule row into the shape the engine expects. */
@@ -184,6 +203,9 @@ router.get("/:slug/availability", async (req: Request, res: Response) => {
     if (!parsed) {
       return sendError(res, 400, "Invalid date", ErrorCode.VALIDATION_ERROR);
     }
+    if (!isWithinHorizon(parsed.year, parsed.month, parsed.day)) {
+      return sendError(res, 400, "Date is outside the booking window", ErrorCode.VALIDATION_ERROR);
+    }
 
     const result = await withTenant(tenant.id, async (tx) => {
       const service = await tx.service.findFirst({
@@ -253,6 +275,9 @@ router.post("/:slug/bookings", bookingLimiter, async (req: Request, res: Respons
     const parsed = parseRealDate(input.date);
     if (!parsed) {
       return sendError(res, 400, "Invalid date", ErrorCode.VALIDATION_ERROR);
+    }
+    if (!isWithinHorizon(parsed.year, parsed.month, parsed.day)) {
+      return sendError(res, 400, "Date is outside the booking window", ErrorCode.VALIDATION_ERROR);
     }
 
     // SERIALIZABLE + retry: the availability re-check and the insert see a stable
@@ -331,12 +356,14 @@ router.post("/:slug/bookings", bookingLimiter, async (req: Request, res: Respons
             cancelToken: true,
             customerName: true,
             customerEmail: true,
+            customerPhone: true,
+            customerNotes: true,
             status: true,
             service: { select: { name: true, durationMinutes: true, price: true } },
           },
         });
 
-        return { booking };
+        return { booking, timezone: config.timezone };
       },
       { isolationLevel: "Serializable", maxRetries: 5 }
     );
@@ -356,9 +383,16 @@ router.post("/:slug/bookings", bookingLimiter, async (req: Request, res: Respons
       return sendError(res, 500, "Failed to create booking", ErrorCode.INTERNAL_ERROR);
     }
 
-    // TODO(F6): trigger confirmation email + .ics asynchronously here. Email is a
-    // non-blocking bonus and must never fail the booking, so it is intentionally
-    // deferred to the email-notifications feature rather than stubbed now.
+    // Fire emails asynchronously — email failure must never fail the booking.
+    const emailTenant = {
+      id: tenant.id,
+      name: tenant.name,
+      slug: tenant.slug,
+      primaryColor: tenant.primaryColor ?? "#4F46E5",
+      timezone: outcome.timezone,
+    };
+    void sendBookingReceived(outcome.booking, emailTenant);
+    void sendAdminNewBooking(outcome.booking, emailTenant);
 
     res.status(201).json({ data: outcome.booking });
   } catch (error) {

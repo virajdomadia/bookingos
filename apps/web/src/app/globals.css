@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Design tokens. HSL triplets (no hsl() wrapper) so Tailwind's
+ * `hsl(var(--token))` mapping in tailwind.config.js can apply opacity modifiers
+ * like `bg-primary/80`. Keep this file as the single source of truth for color,
+ * radius, and typography — components should reference tokens, never hardcode.
+ */
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -13,33 +19,101 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    --primary: 217 91% 60%;
+    /* Brand: indigo, matched to the default tenant primaryColor (#4F46E5). */
+    --primary: 243 75% 59%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96%;
+    --secondary: 240 5% 96%;
     --secondary-foreground: 222 47% 11%;
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted: 240 5% 96%;
+    --muted-foreground: 240 4% 46%;
 
-    --accent: 210 40% 96%;
-    --accent-foreground: 222 47% 11%;
+    --accent: 243 75% 96%;
+    --accent-foreground: 243 75% 40%;
 
-    --destructive: 0 84% 60%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 217 91% 60%;
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
 
-    --radius: 0.5rem;
+    --warning: 38 92% 50%;
+    --warning-foreground: 28 80% 16%;
+
+    --info: 217 91% 60%;
+    --info-foreground: 0 0% 100%;
+
+    --border: 240 6% 90%;
+    --input: 240 6% 90%;
+    --ring: 243 75% 59%;
+
+    --radius: 0.625rem;
+    --radius-sm: calc(var(--radius) - 4px);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) + 4px);
+
+    /* --font-sans is provided by next/font (Inter) on <html>; default it here
+       so non-Inter contexts still get a sane stack. */
+    --font-heading: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  }
+
+  .dark {
+    --background: 224 30% 7%;
+    --foreground: 0 0% 98%;
+
+    --card: 224 27% 10%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 224 27% 10%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 243 75% 68%;
+    --primary-foreground: 224 30% 7%;
+
+    --secondary: 222 20% 18%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 222 20% 16%;
+    --muted-foreground: 240 5% 65%;
+
+    --accent: 243 40% 22%;
+    --accent-foreground: 243 75% 85%;
+
+    --destructive: 0 72% 58%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 65% 50%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 55%;
+    --warning-foreground: 28 80% 12%;
+
+    --info: 217 91% 65%;
+    --info-foreground: 0 0% 100%;
+
+    --border: 222 20% 20%;
+    --input: 222 20% 22%;
+    --ring: 243 75% 68%;
   }
 
   * {
     @apply border-border;
   }
 
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+    @apply tracking-tight;
   }
 }

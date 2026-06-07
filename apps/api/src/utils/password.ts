@@ -2,6 +2,13 @@ import bcrypt from "bcrypt";
 
 const SALT_ROUNDS = 12;
 
+/**
+ * Precomputed hash compared against when a login email doesn't exist, so a
+ * bcrypt verification always runs and response time can't be used to enumerate
+ * which emails are registered.
+ */
+export const DUMMY_PASSWORD_HASH = bcrypt.hashSync("not-a-real-password", SALT_ROUNDS);
+
 export const hashPassword = async (password: string): Promise<string> => {
   return bcrypt.hash(password, SALT_ROUNDS);
 };

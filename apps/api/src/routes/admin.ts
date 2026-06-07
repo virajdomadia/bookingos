@@ -15,6 +15,12 @@ import {
   bookingStatusPatchSchema,
 } from "../lib/validators.js";
 import { ApiError, ErrorCode } from "../types/api.js";
+import {
+  sendBookingConfirmed,
+  sendBookingCancelled,
+  type BookingEmailData,
+  type TenantEmailData,
+} from "../lib/email.js";
 
 const router: ExpressRouter = Router();
 
@@ -288,17 +294,21 @@ router.get("/stats", async (req: Request, res: Response) => {
     const weekStart = new Date(todayStart.getTime() - daysFromMonday * 24 * 60 * 60 * 1000);
     const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    const [todayCount, weekCount, pendingCount] = await Promise.all([
-      prisma.booking.count({
-        where: { tenantId, status: { not: "CANCELLED" }, startsAt: { gte: todayStart, lt: todayEnd } },
-      }),
-      prisma.booking.count({
-        where: { tenantId, status: { not: "CANCELLED" }, startsAt: { gte: weekStart, lt: weekEnd } },
-      }),
-      prisma.booking.count({
-        where: { tenantId, status: "PENDING" },
-      }),
-    ]);
+    // Booking is RLS-protected (FORCE) — these counts must run inside a tenant
+    // context, otherwise the policy filters every row and they all return 0.
+    const [todayCount, weekCount, pendingCount] = await withTenant(tenantId, (tx) =>
+      Promise.all([
+        tx.booking.count({
+          where: { tenantId, status: { not: "CANCELLED" }, startsAt: { gte: todayStart, lt: todayEnd } },
+        }),
+        tx.booking.count({
+          where: { tenantId, status: { not: "CANCELLED" }, startsAt: { gte: weekStart, lt: weekEnd } },
+        }),
+        tx.booking.count({
+          where: { tenantId, status: "PENDING" },
+        }),
+      ])
+    );
 
     res.json({ data: { today: todayCount, thisWeek: weekCount, pending: pendingCount } });
   } catch (error) {
@@ -329,30 +339,34 @@ router.get("/bookings", async (req: Request, res: Response) => {
 
     const skip = (query.page - 1) * query.limit;
 
-    const [bookings, total] = await Promise.all([
-      prisma.booking.findMany({
-        where,
-        orderBy: { startsAt: "asc" },
-        skip,
-        take: query.limit,
-        select: {
-          id: true,
-          customerName: true,
-          customerEmail: true,
-          customerPhone: true,
-          customerNotes: true,
-          adminNotes: true,
-          startsAt: true,
-          endsAt: true,
-          status: true,
-          cancelToken: true,
-          confirmationEmailStatus: true,
-          createdAt: true,
-          service: { select: { id: true, name: true, durationMinutes: true, price: true } },
-        },
-      }),
-      prisma.booking.count({ where }),
-    ]);
+    // Booking is RLS-protected (FORCE) — run the list + count inside a tenant
+    // context, otherwise the policy hides every row and the list is always empty.
+    const [bookings, total] = await withTenant(tenantId, (tx) =>
+      Promise.all([
+        tx.booking.findMany({
+          where,
+          orderBy: { startsAt: "asc" },
+          skip,
+          take: query.limit,
+          select: {
+            id: true,
+            customerName: true,
+            customerEmail: true,
+            customerPhone: true,
+            customerNotes: true,
+            adminNotes: true,
+            startsAt: true,
+            endsAt: true,
+            status: true,
+            cancelToken: true,
+            confirmationEmailStatus: true,
+            createdAt: true,
+            service: { select: { id: true, name: true, durationMinutes: true, price: true } },
+          },
+        }),
+        tx.booking.count({ where }),
+      ])
+    );
 
     res.json({
       data: {
@@ -373,6 +387,43 @@ router.get("/bookings", async (req: Request, res: Response) => {
 // ============================================================================
 // PATCH /admin/bookings/:id  — update status + optional admin notes
 // ============================================================================
+
+// Fire CONFIRMED / CANCELLED emails non-blocking after a status update.
+async function fireStatusEmail(
+  tenantId: string,
+  booking: BookingEmailData,
+  newStatus: string
+): Promise<void> {
+  const tenant = await prisma.tenant
+    .findUnique({
+      where: { id: tenantId },
+      select: { id: true, name: true, slug: true, primaryColor: true },
+    })
+    .catch(() => null);
+  if (!tenant) return;
+
+  // Schedule carries the timezone the booking time must render in. It is
+  // RLS-protected, so read it inside a tenant context.
+  const timezone = await withTenant(tenantId, (tx) =>
+    tx.schedule.findUnique({ where: { tenantId }, select: { timezone: true } })
+  )
+    .then((s) => s?.timezone ?? "Asia/Kolkata")
+    .catch(() => "Asia/Kolkata");
+
+  const tenantData: TenantEmailData = {
+    id: tenant.id,
+    name: tenant.name,
+    slug: tenant.slug,
+    primaryColor: tenant.primaryColor,
+    timezone,
+  };
+
+  if (newStatus === "CONFIRMED") {
+    await sendBookingConfirmed(booking, tenantData);
+  } else if (newStatus === "CANCELLED") {
+    await sendBookingCancelled(booking, tenantData);
+  }
+}
 
 // Allowed status transitions
 const TRANSITIONS: Record<string, string[]> = {
@@ -440,6 +491,16 @@ router.patch(
       }
 
       res.json({ data: result.booking });
+
+      // Fire notification emails non-blocking after response.
+      if (input.status === "CONFIRMED" || input.status === "CANCELLED") {
+        const { id, cancelToken, customerName, customerEmail, customerPhone, customerNotes, adminNotes, startsAt, endsAt, service } = result.booking;
+        void fireStatusEmail(
+          tenantId,
+          { id, cancelToken, customerName, customerEmail, customerPhone, customerNotes, adminNotes, startsAt, endsAt, service },
+          input.status
+        );
+      }
     } catch (error) {
       if (error instanceof ZodError) return sendValidationError(res, error);
       console.error("Patch booking error:", error);

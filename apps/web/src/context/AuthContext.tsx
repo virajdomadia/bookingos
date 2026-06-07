@@ -85,8 +85,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const now = Date.now();
       const minTimeBetweenAttempts = 5000; // 5 seconds
 
-      // Prevent rapid successive refresh attempts
+      // Prevent rapid successive refresh attempts. Re-arm the timer so a
+      // throttled *scheduled* refresh doesn't silently break the refresh chain
+      // (which would let the token expire without a follow-up attempt).
       if (now - lastRefreshAttempt.current < minTimeBetweenAttempts) {
+        scheduleTokenRefresh(6 * 60); // retry in ~1 minute
         return;
       }
 

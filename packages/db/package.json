@@ -8,7 +8,9 @@
     "migrate:prod": "prisma migrate deploy",
     "studio": "prisma studio",
     "seed": "node --loader ts-node/esm scripts/seed.ts",
-    "generate": "prisma generate"
+    "generate": "prisma generate",
+    "rls": "psql \"$DATABASE_URL\" -f scripts/setup-rls.sql",
+    "deploy": "prisma migrate deploy && pnpm run rls"
   },
   "dependencies": {
     "@prisma/client": "^5.8.0",
