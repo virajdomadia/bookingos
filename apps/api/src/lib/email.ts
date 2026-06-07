@@ -152,7 +152,7 @@ function baseEmail(accent: string, header: string, body: string): string {
 // ============================================================================
 
 function tplBookingReceived(booking: BookingEmailData, tenant: TenantEmailData): string {
-  const cancelUrl = `${FRONTEND_URL}/cancel/${booking.cancelToken}`;
+  const cancelUrl = `${FRONTEND_URL}/cancel/${tenant.slug}/${booking.cancelToken}`;
   const tz = tenant.timezone;
   const header = `<h1 style="margin:0;color:#fff;font-size:22px;font-weight:700">&#10003; Booking Received</h1>
 <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:14px">${esc(tenant.name)}</p>`;
@@ -171,7 +171,7 @@ function tplBookingReceived(booking: BookingEmailData, tenant: TenantEmailData):
 }
 
 function tplBookingConfirmed(booking: BookingEmailData, tenant: TenantEmailData): string {
-  const cancelUrl = `${FRONTEND_URL}/cancel/${booking.cancelToken}`;
+  const cancelUrl = `${FRONTEND_URL}/cancel/${tenant.slug}/${booking.cancelToken}`;
   const tz = tenant.timezone;
   const header = `<h1 style="margin:0;color:#fff;font-size:22px;font-weight:700">&#10003; Booking Confirmed</h1>
 <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:14px">${esc(tenant.name)}</p>`;
@@ -251,7 +251,7 @@ export function tplCustomerCancelledAdmin(booking: BookingEmailData, tenant: Ten
 
 // Template for 24hr reminder (used in F9)
 export function tplBookingReminder(booking: BookingEmailData, tenant: TenantEmailData): string {
-  const cancelUrl = `${FRONTEND_URL}/cancel/${booking.cancelToken}`;
+  const cancelUrl = `${FRONTEND_URL}/cancel/${tenant.slug}/${booking.cancelToken}`;
   const tz = tenant.timezone;
   const header = `<h1 style="margin:0;color:#fff;font-size:22px;font-weight:700">Reminder: Tomorrow</h1>
 <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:14px">${esc(tenant.name)}</p>`;

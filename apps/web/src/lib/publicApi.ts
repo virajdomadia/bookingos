@@ -94,3 +94,31 @@ export const createBooking = (
     customerNotes?: string;
   }
 ) => request<CreatedBooking>(`/${slug}/bookings`, { method: "POST", body: JSON.stringify(body) });
+
+// ---------------------------------------------------------------------------
+// Cancellation (F7)
+// ---------------------------------------------------------------------------
+
+export interface CancelInfo {
+  booking: {
+    status: string;
+    startsAt: string;
+    endsAt: string;
+    customerName: string;
+    service: { name: string; durationMinutes: number; price: number };
+  };
+  tenant: PublicTenant;
+  /** Booking is already cancelled — show the cancelled state, no action. */
+  alreadyCancelled: boolean;
+  /** Booking is in a cancellable state (pending/confirmed and still upcoming). */
+  canCancel: boolean;
+}
+
+export const getCancelInfo = (slug: string, token: string) =>
+  request<CancelInfo>(`/${slug}/cancel/${encodeURIComponent(token)}`);
+
+export const cancelBooking = (slug: string, token: string) =>
+  request<{ cancelled?: boolean; alreadyCancelled?: boolean }>(
+    `/${slug}/cancel/${encodeURIComponent(token)}`,
+    { method: "POST" }
+  );

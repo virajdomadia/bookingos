@@ -12,7 +12,12 @@ import {
 } from "../lib/availability.js";
 import { availabilityQuerySchema, bookingCreateSchema } from "../lib/validators.js";
 import { ApiError, ErrorCode } from "../types/api.js";
-import { sendBookingReceived, sendAdminNewBooking } from "../lib/email.js";
+import {
+  sendBookingReceived,
+  sendAdminNewBooking,
+  sendBookingCancelled,
+  sendAdminCustomerCancelled,
+} from "../lib/email.js";
 
 const router: ExpressRouter = Router();
 
@@ -44,6 +49,9 @@ const sendError = (res: Response, status: number, error: string, code: ErrorCode
 };
 
 const SLUG_RE = /^[a-z0-9-]{3,50}$/;
+// cancelToken is a cuid (alphanumeric). Loose bound rejects obvious garbage
+// before a DB lookup without coupling to the exact cuid format.
+const CANCEL_TOKEN_RE = /^[a-z0-9]{10,64}$/i;
 
 /**
  * The `Booking_no_overlap` GiST exclusion constraint (see migration
@@ -404,6 +412,155 @@ router.post("/:slug/bookings", bookingLimiter, async (req: Request, res: Respons
     }
     console.error("Public create booking error:", error);
     sendError(res, 500, "Failed to create booking", ErrorCode.INTERNAL_ERROR);
+  }
+});
+
+// ============================================================================
+// GET /public/:slug/cancel/:token  — booking detail for the cancel page (F7)
+// ============================================================================
+// Booking is RLS-protected, so the tenant is resolved by slug first (Tenant has
+// no RLS), then the cancelToken is looked up inside that tenant's context.
+
+router.get("/:slug/cancel/:token", async (req: Request, res: Response) => {
+  try {
+    const tenant = await resolveTenant(req.params.slug);
+    if (!tenant || !tenant.isActive) {
+      return sendError(res, 404, "Booking not found", ErrorCode.NOT_FOUND);
+    }
+    if (!CANCEL_TOKEN_RE.test(req.params.token)) {
+      return sendError(res, 404, "Booking not found", ErrorCode.NOT_FOUND);
+    }
+
+    const result = await withTenant(tenant.id, async (tx) => {
+      const booking = await tx.booking.findFirst({
+        where: { cancelToken: req.params.token, tenantId: tenant.id },
+        select: {
+          status: true,
+          startsAt: true,
+          endsAt: true,
+          customerName: true,
+          service: { select: { name: true, durationMinutes: true, price: true } },
+        },
+      });
+      const schedule = await tx.schedule.findUnique({
+        where: { tenantId: tenant.id },
+        select: { timezone: true },
+      });
+      return { booking, timezone: schedule?.timezone ?? "Asia/Kolkata" };
+    });
+
+    if (!result.booking) {
+      return sendError(res, 404, "Booking not found", ErrorCode.NOT_FOUND);
+    }
+
+    const b = result.booking;
+    const alreadyCancelled = b.status === "CANCELLED";
+    const canCancel =
+      (b.status === "PENDING" || b.status === "CONFIRMED") && b.startsAt.getTime() > Date.now();
+
+    res.json({
+      data: {
+        booking: {
+          status: b.status,
+          startsAt: b.startsAt.toISOString(),
+          endsAt: b.endsAt.toISOString(),
+          customerName: b.customerName,
+          service: b.service,
+        },
+        tenant: {
+          name: tenant.name,
+          slug: tenant.slug,
+          logoUrl: tenant.logoUrl,
+          primaryColor: tenant.primaryColor,
+          timezone: result.timezone,
+        },
+        alreadyCancelled,
+        canCancel,
+      },
+    });
+  } catch (error) {
+    console.error("Public get cancel error:", error);
+    sendError(res, 500, "Failed to load booking", ErrorCode.INTERNAL_ERROR);
+  }
+});
+
+// ============================================================================
+// POST /public/:slug/cancel/:token  — customer cancels their booking (F7)
+// ============================================================================
+
+router.post("/:slug/cancel/:token", bookingLimiter, async (req: Request, res: Response) => {
+  try {
+    const tenant = await resolveTenant(req.params.slug);
+    if (!tenant || !tenant.isActive) {
+      return sendError(res, 404, "Booking not found", ErrorCode.NOT_FOUND);
+    }
+    if (!CANCEL_TOKEN_RE.test(req.params.token)) {
+      return sendError(res, 404, "Booking not found", ErrorCode.NOT_FOUND);
+    }
+
+    const outcome = await withTenant(tenant.id, async (tx) => {
+      const booking = await tx.booking.findFirst({
+        where: { cancelToken: req.params.token, tenantId: tenant.id },
+        select: { id: true, status: true, startsAt: true },
+      });
+      if (!booking) return { error: "NOT_FOUND" as const };
+      // Idempotent: cancelling an already-cancelled booking is a no-op success.
+      if (booking.status === "CANCELLED") return { error: "ALREADY" as const };
+      // Past/finished bookings can't be cancelled by the customer.
+      if (booking.status !== "PENDING" && booking.status !== "CONFIRMED") {
+        return { error: "CANNOT" as const };
+      }
+      if (booking.startsAt.getTime() <= Date.now()) return { error: "CANNOT" as const };
+
+      const updated = await tx.booking.update({
+        where: { id: booking.id },
+        data: { status: "CANCELLED" },
+        select: {
+          id: true,
+          cancelToken: true,
+          customerName: true,
+          customerEmail: true,
+          customerPhone: true,
+          customerNotes: true,
+          adminNotes: true,
+          startsAt: true,
+          endsAt: true,
+          service: { select: { name: true, durationMinutes: true, price: true } },
+        },
+      });
+      const schedule = await tx.schedule.findUnique({
+        where: { tenantId: tenant.id },
+        select: { timezone: true },
+      });
+      return { booking: updated, timezone: schedule?.timezone ?? "Asia/Kolkata" };
+    });
+
+    if ("error" in outcome) {
+      switch (outcome.error) {
+        case "NOT_FOUND":
+          return sendError(res, 404, "Booking not found", ErrorCode.NOT_FOUND);
+        case "ALREADY":
+          return res.json({ data: { alreadyCancelled: true } });
+        case "CANNOT":
+          return sendError(res, 409, "This booking can no longer be cancelled", ErrorCode.CONFLICT);
+      }
+    }
+
+    // Notify both sides — failures must never fail the cancellation.
+    const tenantData = {
+      id: tenant.id,
+      name: tenant.name,
+      slug: tenant.slug,
+      primaryColor: tenant.primaryColor ?? "#4F46E5",
+      timezone: outcome.timezone,
+    };
+    void sendBookingCancelled(outcome.booking, tenantData);
+    void sendAdminCustomerCancelled(outcome.booking, tenantData);
+
+    res.json({ data: { cancelled: true } });
+  } catch (error) {
+    console.error("Public cancel error:", error);
+    sendError(res, 500, "Failed to cancel booking", ErrorCode.INTERNAL_ERROR);
   }
 });
 
