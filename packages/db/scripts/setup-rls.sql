@@ -9,9 +9,9 @@
 -- pooled connection and the setting is visible to the policies).
 --
 -- RLS is applied only to the tenant-scoped DATA tables. "User" and "Tenant"
--- are intentionally left out so the unauthenticated auth flow (login/register/
--- refresh) — which must look up users by email and tenants by slug BEFORE a
--- tenant context exists — keeps working.
+-- are intentionally left out so the unauthenticated auth flow (login/refresh)
+-- and super admin tenant provisioning — which must look up / create users and
+-- tenants BEFORE a tenant context exists — keep working.
 --
 -- ORDER OF OPERATIONS (important):
 --   1. prisma migrate deploy        (create tables)

@@ -9,6 +9,7 @@ import { fileURLToPath } from "url";
 import authRouter from "./routes/auth.js";
 import adminRouter from "./routes/admin.js";
 import publicRouter from "./routes/public.js";
+import superadminRouter from "./routes/superadmin.js";
 
 // Load .env from the correct directory
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -16,12 +17,10 @@ dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 // Validate critical environment variables
 const validateEnvironment = () => {
-  const requiredVars = [
-    "JWT_SECRET",
-    "JWT_REFRESH_SECRET",
-    "DATABASE_URL",
-    "FRONTEND_URL",
-  ];
+  // Refresh tokens are opaque random strings (crypto.randomBytes), not JWTs, so
+  // there is no JWT_REFRESH_SECRET to sign them with — only JWT_SECRET (access
+  // tokens) is actually used.
+  const requiredVars = ["JWT_SECRET", "DATABASE_URL", "FRONTEND_URL"];
 
   const missingVars: string[] = [];
 
@@ -47,15 +46,13 @@ const validateEnvironment = () => {
     process.exit(1);
   }
 
-  if (
-    process.env.JWT_REFRESH_SECRET &&
-    process.env.JWT_REFRESH_SECRET.length < minSecretLength
-  ) {
-    console.error(
-      `❌ JWT_REFRESH_SECRET too short. Must be at least ${minSecretLength} characters, ` +
-        `got ${process.env.JWT_REFRESH_SECRET.length}`
+  // Super admin is optional (the API runs without it) but the panel fails closed
+  // when it's unset — warn loudly so a misconfigured prod is noticed at boot,
+  // not at first tenant-creation attempt.
+  if (!process.env.SUPER_ADMIN_SECRET) {
+    console.warn(
+      "⚠️  SUPER_ADMIN_SECRET not set — the super admin panel (tenant creation) is disabled."
     );
-    process.exit(1);
   }
 
   console.log("✓ All environment variables validated");
@@ -74,6 +71,17 @@ app.set("trust proxy", 1);
 app.use(helmet());
 app.use(compression());
 app.use(express.json({ limit: "100kb" }));
+// Turn body-parser's SyntaxError (malformed JSON / oversized body) into a clean
+// 400 instead of letting it fall through to the generic 500 error handler.
+app.use((err: any, _req: Request, res: Response, next: any) => {
+  if (err?.type === "entity.parse.failed" || err instanceof SyntaxError) {
+    return res.status(400).json({ error: "Invalid JSON body", code: "VALIDATION_ERROR" });
+  }
+  if (err?.type === "entity.too.large") {
+    return res.status(413).json({ error: "Request body too large", code: "VALIDATION_ERROR" });
+  }
+  next(err);
+});
 app.use(cookieParser());
 app.use(
   cors({
@@ -86,6 +94,7 @@ app.use(
 app.use("/auth", authRouter);
 app.use("/admin", adminRouter);
 app.use("/public", publicRouter);
+app.use("/superadmin", superadminRouter);
 
 // Health check (public)
 app.get("/health", (req: Request, res: Response) => {
@@ -95,6 +104,11 @@ app.get("/health", (req: Request, res: Response) => {
 // API status (public, for checking)
 app.get("/api/status", (req: Request, res: Response) => {
   res.json({ status: "ok", version: "1.0.0", timestamp: new Date().toISOString() });
+});
+
+// Unknown routes → explicit 404 (instead of falling through to the error handler)
+app.use((req: Request, res: Response) => {
+  res.status(404).json({ error: "Not found", code: "NOT_FOUND" });
 });
 
 // Global error handler middleware (must be last)

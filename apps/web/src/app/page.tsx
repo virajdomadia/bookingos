@@ -51,15 +51,15 @@ export default function Home() {
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link href="/auth">
             <Button size="lg" className="w-full sm:w-auto">
-              Get started free
+              Sign in to your account
               <ArrowRightIcon className="size-4" />
             </Button>
           </Link>
-          <Link href="/auth">
+          <a href="mailto:hello@bookingos.app?subject=BookingOS%20demo%20request">
             <Button size="lg" variant="outline" className="w-full sm:w-auto">
-              Sign in
+              Request a demo
             </Button>
-          </Link>
+          </a>
         </div>
       </section>
 

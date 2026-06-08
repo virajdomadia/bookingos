@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import prisma from "../lib/prisma.js";
 
 declare global {
   namespace Express {
@@ -73,8 +74,33 @@ export const authMiddleware = async (
       });
     }
 
-    req.user = user;
-    req.tenantId = user.tenantId;
+    // Re-check the user against the DB on every request. The access token is
+    // valid for 15 minutes, so without this a role change, deactivation, or
+    // tenant suspension would not take effect until the token expired. The
+    // authoritative role/tenant come from the DB, not the (stale) token claims.
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.userId },
+      select: { role: true, isActive: true, tenantId: true, tenant: { select: { isActive: true } } },
+    });
+
+    if (!dbUser || !dbUser.isActive || !dbUser.tenant.isActive) {
+      return res.status(401).json({
+        error: "Account is no longer active",
+        code: "UNAUTHORIZED",
+      });
+    }
+
+    // Guard against a token whose tenant claim no longer matches the user's
+    // tenant (e.g. a re-provisioned account) — fail closed rather than trust it.
+    if (dbUser.tenantId !== user.tenantId) {
+      return res.status(401).json({
+        error: "Invalid token payload",
+        code: "UNAUTHORIZED",
+      });
+    }
+
+    req.user = { ...user, role: dbUser.role };
+    req.tenantId = dbUser.tenantId;
 
     // Note: the RLS tenant context is NOT set here. Because Prisma pools
     // connections, the tenant id must be set on the same connection that runs

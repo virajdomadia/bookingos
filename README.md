@@ -113,7 +113,7 @@ pnpm dev:web
 | Feature | Status | Priority | Time |
 |---------|--------|----------|------|
 | F0: Project Setup | ✓ In Progress | P0 | 6-8h |
-| F1: Auth (Register/Login) | Planned | P0 | 8-10h |
+| F1: Auth (Login only — no public register) | ✓ Done | P0 | 8-10h |
 | F2: Tenant & Schedule Mgmt | Planned | P0 | 6-8h |
 | F3: Service Management | Planned | P0 | 4-6h |
 | F4: Public Booking Flow | Planned | P0 | 14-18h |
@@ -132,6 +132,7 @@ pnpm dev:web
 - **Path-based routing:** `/book/[slug]` instead of subdomain (simpler SSL on Vercel free tier)
 - **RLS mandatory:** Row-Level Security policies enforce tenant isolation at database layer
 - **Custom JWT only:** NextAuth removed due to RLS context conflicts (Express sets `app.tenant_id`)
+- **No self-service signup:** tenants + owners are provisioned only via the super admin panel (`/superadmin`, `X-Super-Admin-Secret`); there is no public `/auth/register`
 - **Race condition prevention:** SERIALIZABLE transactions + SELECT FOR UPDATE
 - **pnpm workspaces:** Lightweight monorepo, Turborepo removed (added zero value at this scale)
 

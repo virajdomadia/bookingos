@@ -37,7 +37,6 @@ interface AuthContextType {
   isLoading: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
-  register: (tenantName: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
   setAccessToken: (token: string) => void;
@@ -267,57 +266,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   // ============================================================================
-  // REGISTER
-  // ============================================================================
-
-  const register = useCallback(
-    async (tenantName: string, email: string, password: string) => {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/auth/register`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ tenantName, email, password }),
-            credentials: "include",
-          }
-        );
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || "Registration failed");
-        }
-
-        const { data } = await response.json();
-        const { accessToken, user, expiresIn } = data;
-
-        setAccessToken(accessToken);
-        setUser(user);
-        setError(null);
-        refreshRetryCount.current = 0;
-
-        // Schedule refresh
-        if (expiresIn) {
-          scheduleTokenRefresh(expiresIn);
-        }
-      } catch (err: any) {
-        const errorMessage =
-          err.message || "Registration failed. Please try again with different details.";
-        setError(errorMessage);
-        setAccessToken(null);
-        setUser(null);
-        throw err;
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [scheduleTokenRefresh]
-  );
-
-  // ============================================================================
   // LOGOUT
   // ============================================================================
 
@@ -352,7 +300,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         error,
         login,
-        register,
         logout,
         clearError,
         setAccessToken,

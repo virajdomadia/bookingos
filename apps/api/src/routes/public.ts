@@ -56,10 +56,19 @@ const CANCEL_TOKEN_RE = /^[a-z0-9]{10,64}$/i;
 /**
  * The `Booking_no_overlap` GiST exclusion constraint (see migration
  * 20260606150000) is the database's final guard against double-booking: two
- * non-cancelled bookings whose time ranges overlap for a tenant can never both
- * commit. Postgres raises SQLSTATE 23P01 (exclusion_violation), which we treat
- * as "slot taken". This is the backstop for the phantom-write race that the
- * SERIALIZABLE availability re-check alone cannot fully close.
+ * non-cancelled bookings whose `tsrange("startsAt","endsAt")` ranges overlap for
+ * a tenant can never both commit. Postgres raises SQLSTATE 23P01
+ * (exclusion_violation), which we treat as "slot taken". This is the backstop
+ * for the phantom-write race that the SERIALIZABLE availability re-check alone
+ * cannot fully close.
+ *
+ * IMPORTANT: the constraint guards only *true* time-range overlaps. The per-
+ * tenant `bufferTime` clearance is NOT encoded in it (the buffer is dynamic
+ * schedule data, not a constant the static constraint can reference). Buffer
+ * enforcement under concurrency therefore relies solely on the SERIALIZABLE
+ * re-check + retry below. With the default `bufferTime: 0` the two guards are
+ * equivalent; with a non-zero buffer, two bookings inside the buffer window but
+ * not actually overlapping are stopped by SERIALIZABLE, not the constraint.
  */
 const isOverlapViolation = (err: unknown): boolean => {
   const meta = (err as { meta?: { code?: string } } | undefined)?.meta;

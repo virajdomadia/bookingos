@@ -16,7 +16,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { cn } from "@/lib/utils";
 
 const HIGHLIGHTS = [
   { icon: ClockIcon, title: "Set up in minutes", body: "Add your services and hours, then share one link." },
@@ -26,11 +25,10 @@ const HIGHLIGHTS = [
 
 export default function AuthPage() {
   const router = useRouter();
-  const { login, register, isLoading } = useAuth();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const { login, isLoading } = useAuth();
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [formData, setFormData] = useState({ email: "", password: "", tenantName: "" });
+  const [formData, setFormData] = useState({ email: "", password: "" });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -41,24 +39,11 @@ export default function AuthPage() {
     e.preventDefault();
     setError("");
     try {
-      if (mode === "login") {
-        await login(formData.email, formData.password);
-      } else {
-        if (!formData.tenantName.trim()) {
-          setError("Business name is required");
-          return;
-        }
-        await register(formData.tenantName, formData.email, formData.password);
-      }
+      await login(formData.email, formData.password);
       router.push("/admin");
     } catch (err: any) {
-      setError(err?.message || (mode === "login" ? "Login failed" : "Registration failed"));
+      setError(err?.message || "Login failed");
     }
-  };
-
-  const switchMode = (next: "login" | "register") => {
-    setMode(next);
-    setError("");
   };
 
   return (
@@ -115,33 +100,8 @@ export default function AuthPage() {
           </div>
 
           <div className="mb-6 space-y-1.5">
-            <h2 className="font-heading text-2xl font-semibold tracking-tight">
-              {mode === "login" ? "Welcome back" : "Create your account"}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {mode === "login"
-                ? "Sign in to manage your bookings."
-                : "Start taking bookings in a few minutes."}
-            </p>
-          </div>
-
-          {/* Segmented toggle */}
-          <div className="mb-6 grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
-            {(["login", "register"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => switchMode(m)}
-                className={cn(
-                  "h-8 rounded-md text-sm font-medium transition-all",
-                  mode === m
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {m === "login" ? "Sign in" : "Sign up"}
-              </button>
-            ))}
+            <h2 className="font-heading text-2xl font-semibold tracking-tight">Welcome back</h2>
+            <p className="text-sm text-muted-foreground">Sign in to manage your bookings.</p>
           </div>
 
           {error && (
@@ -151,22 +111,6 @@ export default function AuthPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === "register" && (
-              <div className="space-y-1.5">
-                <Label htmlFor="tenantName">Business name</Label>
-                <Input
-                  id="tenantName"
-                  name="tenantName"
-                  type="text"
-                  placeholder="e.g. Bloom Hair Studio"
-                  value={formData.tenantName}
-                  onChange={handleInputChange}
-                  autoComplete="organization"
-                  required
-                />
-              </div>
-            )}
-
             <div className="space-y-1.5">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -191,7 +135,7 @@ export default function AuthPage() {
                   placeholder="••••••••"
                   value={formData.password}
                   onChange={handleInputChange}
-                  autoComplete={mode === "login" ? "current-password" : "new-password"}
+                  autoComplete="current-password"
                   className="pr-10"
                   required
                 />
@@ -204,11 +148,6 @@ export default function AuthPage() {
                   {showPassword ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
                 </button>
               </div>
-              {mode === "register" && (
-                <p className="text-xs text-muted-foreground">
-                  At least 8 characters, with an uppercase letter and a number.
-                </p>
-              )}
             </div>
 
             <Button type="submit" size="lg" disabled={isLoading} className="w-full">
@@ -219,7 +158,7 @@ export default function AuthPage() {
                 </>
               ) : (
                 <>
-                  {mode === "login" ? "Sign in" : "Create account"}
+                  Sign in
                   <ArrowRightIcon className="size-4" />
                 </>
               )}
@@ -227,29 +166,7 @@ export default function AuthPage() {
           </form>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
-            {mode === "login" ? (
-              <>
-                New to BookingOS?{" "}
-                <button
-                  type="button"
-                  className="font-medium text-primary hover:underline"
-                  onClick={() => switchMode("register")}
-                >
-                  Create an account
-                </button>
-              </>
-            ) : (
-              <>
-                Already have an account?{" "}
-                <button
-                  type="button"
-                  className="font-medium text-primary hover:underline"
-                  onClick={() => switchMode("login")}
-                >
-                  Sign in
-                </button>
-              </>
-            )}
+            Don&apos;t have an account? Contact us to get your booking page set up.
           </p>
         </div>
       </main>
