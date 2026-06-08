@@ -268,6 +268,24 @@ export function tplBookingReminder(booking: BookingEmailData, tenant: TenantEmai
   return baseEmail(tenant.primaryColor, header, body);
 }
 
+// Template for a staff invite (F8). `inviteUrl` carries the raw invite token.
+export function tplStaffInvite(
+  inviteUrl: string,
+  tenant: TenantEmailData,
+  role: string
+): string {
+  const roleLabel = role.charAt(0) + role.slice(1).toLowerCase();
+  const header = `<h1 style="margin:0;color:#fff;font-size:22px;font-weight:700">You're invited</h1>
+<p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:14px">${esc(tenant.name)}</p>`;
+  const body = `<p style="margin:0 0 16px;font-size:16px;color:#18181b">Hi there,</p>
+<p style="margin:0 0 20px;font-size:15px;color:#3f3f46;line-height:1.5">You've been invited to join <strong>${esc(tenant.name)}</strong> on BookingOS as <strong>${esc(roleLabel)}</strong>. Set a password to activate your account and start managing bookings.</p>
+<p style="margin:24px 0 0">
+<a href="${inviteUrl}" style="display:inline-block;background:${tenant.primaryColor};color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Accept invite &#8594;</a>
+</p>
+<p style="margin:24px 0 0;font-size:13px;color:#71717a">This link expires in 7 days. If you weren't expecting this invite, you can ignore this email.</p>`;
+  return baseEmail(tenant.primaryColor, header, body);
+}
+
 // ============================================================================
 // Internal helpers
 // ============================================================================
@@ -409,6 +427,24 @@ export async function sendAdminCustomerCancelled(
   } catch (err) {
     console.error("[email] sendAdminCustomerCancelled failed:", err);
   }
+}
+
+/**
+ * Staff invite email (F8). Unlike booking emails this is NOT fire-and-forget:
+ * it throws on failure so the invite route can surface the error and avoid
+ * leaving a pending invite the recipient never received.
+ */
+export async function sendStaffInvite(params: {
+  to: string;
+  inviteUrl: string;
+  tenant: TenantEmailData;
+  role: string;
+}): Promise<void> {
+  await send({
+    to: params.to,
+    subject: `You're invited to join ${params.tenant.name} on BookingOS`,
+    html: tplStaffInvite(params.inviteUrl, params.tenant, params.role),
+  });
 }
 
 /** 24hr reminder email to customer (F9 cron). */

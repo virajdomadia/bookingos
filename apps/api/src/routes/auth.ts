@@ -1,11 +1,12 @@
 import { Router, Request, Response } from "express";
 import type { Router as ExpressRouter } from "express";
-import { Prisma } from "@prisma/client";
 import { z, ZodError } from "zod";
 import rateLimit from "express-rate-limit";
 import { generateTokens, hashToken } from "../utils/jwt.js";
-import { hashPassword, verifyPassword, validatePassword, DUMMY_PASSWORD_HASH } from "../utils/password.js";
+import { verifyPassword, hashPassword, validatePassword, DUMMY_PASSWORD_HASH } from "../utils/password.js";
+import { acceptInviteSchema } from "../lib/validators.js";
 import prisma from "../lib/prisma.js";
+import { refreshCookieOptions, clearRefreshCookieOptions } from "../lib/cookies.js";
 import { ApiError, AuthResponse, ErrorCode } from "../types/api.js";
 
 const router: ExpressRouter = Router();
@@ -14,17 +15,6 @@ const router: ExpressRouter = Router();
 // VALIDATION & NORMALIZATION
 // ============================================================================
 
-const sanitizeSlug = (name: string): string => {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9-]/g, "")
-    .replace(/-+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .substring(0, 50);
-};
-
 const normalizeEmail = (email: string): string => {
   return email.toLowerCase().trim();
 };
@@ -32,16 +22,6 @@ const normalizeEmail = (email: string): string => {
 // ============================================================================
 // VALIDATION SCHEMAS
 // ============================================================================
-
-const registerSchema = z.object({
-  tenantName: z
-    .string()
-    .min(2, "Business name must be at least 2 characters")
-    .max(100, "Business name must be at most 100 characters")
-    .trim(),
-  email: z.string().email("Invalid email format").max(255),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-});
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email format"),
@@ -54,9 +34,15 @@ const loginSchema = z.object({
 // RATE LIMITING
 // ============================================================================
 
+// NOTE: the default store is in-memory and per-process, so this limit is NOT
+// shared across multiple API instances and resets on every redeploy. If the API
+// is ever scaled horizontally (F11), switch to a shared store (e.g. Redis).
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
+  // Only failed logins count toward the limit, so a legitimate user isn't locked
+  // out by their own successful sign-ins (matters on shared/NAT IPs).
+  skipSuccessfulRequests: true,
   message: "Too many authentication attempts, please try again later",
   standardHeaders: false,
   legacyHeaders: false,
@@ -81,159 +67,11 @@ const sendError = (res: Response, status: number, error: string, code: ErrorCode
 };
 
 // ============================================================================
-// ROUTES: POST /auth/register
-// ============================================================================
-
-router.post("/register", authLimiter, async (req: Request, res: Response) => {
-  try {
-    // Parse request body
-    const { tenantName, email: rawEmail, password } = registerSchema.parse(req.body);
-
-    // Normalize email
-    const email = normalizeEmail(rawEmail);
-
-    // Validate password strength
-    const passwordValidation = validatePassword(password);
-    if (!passwordValidation.valid) {
-      return sendError(
-        res,
-        400,
-        passwordValidation.error || "Password does not meet requirements",
-        ErrorCode.WEAK_PASSWORD
-      );
-    }
-
-    // Check email uniqueness (email is globally unique)
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-    });
-    if (existingUser) {
-      return sendError(res, 409, "Email is already registered", ErrorCode.EMAIL_TAKEN);
-    }
-
-    // Sanitize and validate slug
-    const slug = sanitizeSlug(tenantName);
-    if (slug.length < 3) {
-      return sendError(
-        res,
-        400,
-        "Business name is too short. Must have at least 3 alphanumeric characters.",
-        ErrorCode.VALIDATION_ERROR
-      );
-    }
-
-    // Check slug uniqueness
-    const existingTenant = await prisma.tenant.findUnique({
-      where: { slug },
-    });
-    if (existingTenant) {
-      return sendError(res, 409, "This business name is already taken", ErrorCode.SLUG_TAKEN);
-    }
-
-    // Hash password
-    const passwordHash = await hashPassword(password);
-
-    // Create tenant, schedule, and user in transaction
-    const result = await prisma.$transaction(async (tx) => {
-      const tenant = await tx.tenant.create({
-        data: {
-          name: tenantName,
-          slug,
-        },
-      });
-
-      await tx.schedule.create({
-        data: {
-          tenantId: tenant.id,
-          timezone: "Asia/Kolkata",
-          workStart: "09:00",
-          workEnd: "18:00",
-          slotInterval: 30,
-        },
-      });
-
-      const user = await tx.user.create({
-        data: {
-          tenantId: tenant.id,
-          email,
-          passwordHash,
-          role: "OWNER",
-        },
-      });
-
-      return { tenant, user };
-    });
-
-    // Generate tokens
-    const { accessToken, refreshToken, refreshTokenExpiry } = generateTokens({
-      userId: result.user.id,
-      tenantId: result.tenant.id,
-      role: "OWNER",
-      email: result.user.email,
-    });
-
-    // Store refresh token in database (hashed at rest)
-    const expiresAt = new Date(Date.now() + refreshTokenExpiry * 1000);
-    await prisma.refreshToken.create({
-      data: {
-        userId: result.user.id,
-        token: hashToken(refreshToken),
-        expiresAt,
-      },
-    });
-
-    // Set refresh token cookie
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: refreshTokenExpiry * 1000,
-      path: "/",
-    });
-
-    // Send success response
-    const authResponse: AuthResponse = {
-      accessToken,
-      expiresIn: 15 * 60, // 15 minutes
-      user: {
-        userId: result.user.id,
-        email: result.user.email,
-        role: result.user.role,
-      },
-      tenant: {
-        id: result.tenant.id,
-        name: result.tenant.name,
-        slug: result.tenant.slug,
-      },
-    };
-
-    res.status(201).json({ data: authResponse });
-  } catch (error) {
-    if (error instanceof ZodError) {
-      const firstError = error.errors[0];
-      return sendError(res, 400, firstError.message, ErrorCode.VALIDATION_ERROR);
-    }
-
-    // The pre-checks above have a TOCTOU window: a concurrent register can take
-    // the same slug/email between the check and the insert. The unique
-    // constraint is the real guard — translate it into the right 409 instead of
-    // a generic 500.
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      const target = (error.meta?.target as string[] | string | undefined) ?? "";
-      const onEmail = Array.isArray(target) ? target.includes("email") : String(target).includes("email");
-      return onEmail
-        ? sendError(res, 409, "Email is already registered", ErrorCode.EMAIL_TAKEN)
-        : sendError(res, 409, "This business name is already taken", ErrorCode.SLUG_TAKEN);
-    }
-
-    console.error("Register error:", error);
-    sendError(res, 500, "Registration failed. Please try again.", ErrorCode.INTERNAL_ERROR);
-  }
-});
-
-// ============================================================================
 // ROUTES: POST /auth/login
 // ============================================================================
+//
+// There is no public registration endpoint. Tenants and their owner users are
+// provisioned exclusively through the super admin panel (see routes/superadmin).
 
 router.post("/login", authLimiter, async (req: Request, res: Response) => {
   try {
@@ -281,13 +119,7 @@ router.post("/login", authLimiter, async (req: Request, res: Response) => {
     ]);
 
     // Set refresh token cookie
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: refreshTokenExpiry * 1000,
-      path: "/",
-    });
+    res.cookie("refreshToken", refreshToken, refreshCookieOptions(refreshTokenExpiry * 1000));
 
     // Send success response
     const authResponse: AuthResponse = {
@@ -373,19 +205,13 @@ router.post("/refresh", async (req: Request, res: Response) => {
 
     if (!result.ok) {
       if (result.reason === "deactivated") {
-        res.clearCookie("refreshToken");
+        res.clearCookie("refreshToken", clearRefreshCookieOptions());
         return sendError(res, 403, "Account is deactivated. Please contact support.", ErrorCode.FORBIDDEN);
       }
       return sendError(res, 401, "Refresh token expired or invalid", ErrorCode.TOKEN_EXPIRED);
     }
 
-    res.cookie("refreshToken", result.newRefreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: result.refreshTokenExpiry * 1000,
-      path: "/",
-    });
+    res.cookie("refreshToken", result.newRefreshToken, refreshCookieOptions(result.refreshTokenExpiry * 1000));
 
     res.json({
       data: {
@@ -415,11 +241,106 @@ router.post("/logout", async (req: Request, res: Response) => {
       });
     }
 
-    res.clearCookie("refreshToken");
+    res.clearCookie("refreshToken", clearRefreshCookieOptions());
     res.json({ data: { message: "Logged out successfully" } });
   } catch (error) {
     console.error("Logout error:", error);
     sendError(res, 500, "Logout failed", ErrorCode.INTERNAL_ERROR);
+  }
+});
+
+// ============================================================================
+// ROUTES: GET /auth/invite/:token  — validate a staff invite link (F8)
+// ============================================================================
+//
+// Public, no auth: the invite token is the authorization. Returns the email and
+// business name so the accept-invite page can greet the invitee, plus whether
+// the link has expired. Like login, this runs without a tenant context (the
+// User/Tenant tables are not under RLS).
+
+router.get("/invite/:token", async (req: Request, res: Response) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { inviteTokenHash: hashToken(req.params.token) },
+      select: {
+        email: true,
+        role: true,
+        inviteExpiresAt: true,
+        tenant: { select: { name: true, isActive: true } },
+      },
+    });
+
+    if (!user || !user.inviteExpiresAt) {
+      return sendError(res, 404, "This invite link is invalid", ErrorCode.NOT_FOUND);
+    }
+    if (!user.tenant.isActive) {
+      return sendError(res, 403, "This business account is no longer active", ErrorCode.FORBIDDEN);
+    }
+
+    const expired = user.inviteExpiresAt.getTime() < Date.now();
+    res.json({
+      data: {
+        email: user.email,
+        role: user.role,
+        businessName: user.tenant.name,
+        expired,
+      },
+    });
+  } catch (error) {
+    console.error("Get invite error:", error);
+    sendError(res, 500, "Failed to load invite", ErrorCode.INTERNAL_ERROR);
+  }
+});
+
+// ============================================================================
+// ROUTES: POST /auth/accept-invite  — set password + activate account (F8)
+// ============================================================================
+
+router.post("/accept-invite", authLimiter, async (req: Request, res: Response) => {
+  try {
+    const { token, password } = acceptInviteSchema.parse(req.body);
+
+    // Enforce the same password strength rules as super-admin tenant creation.
+    const strength = validatePassword(password);
+    if (!strength.valid) {
+      return sendError(res, 400, strength.error ?? "Weak password", ErrorCode.WEAK_PASSWORD);
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { inviteTokenHash: hashToken(token) },
+      include: { tenant: { select: { isActive: true } } },
+    });
+
+    if (!user || !user.inviteExpiresAt) {
+      return sendError(res, 404, "This invite link is invalid", ErrorCode.NOT_FOUND);
+    }
+    if (user.inviteExpiresAt.getTime() < Date.now()) {
+      return sendError(res, 410, "This invite link has expired. Ask for a new one.", ErrorCode.TOKEN_EXPIRED);
+    }
+    if (!user.tenant.isActive) {
+      return sendError(res, 403, "This business account is no longer active", ErrorCode.FORBIDDEN);
+    }
+
+    const passwordHash = await hashPassword(password);
+    // Setting the password, activating, and clearing the (single-use) token all
+    // happen in one update so a replayed token can't re-activate the account.
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        isActive: true,
+        inviteTokenHash: null,
+        inviteExpiresAt: null,
+      },
+    });
+
+    res.json({ data: { message: "Account activated. You can now sign in." } });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return sendError(res, 400, error.errors[0].message, ErrorCode.VALIDATION_ERROR);
+    }
+    console.error("Accept invite error:", error);
+    sendError(res, 500, "Failed to accept invite", ErrorCode.INTERNAL_ERROR);
   }
 });
 

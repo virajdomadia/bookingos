@@ -38,6 +38,13 @@ model User {
   isSuperAdmin Boolean  @default(false)
   isActive     Boolean  @default(true)
 
+  // Staff invite flow (F8): a pending invitee is created with isActive=false and
+  // a hashed, expiring invite token. Accepting the invite sets the real password,
+  // activates the account, and clears both fields. A null inviteTokenHash means
+  // the user has no outstanding invite (either accepted it or was created directly).
+  inviteTokenHash String?  @unique
+  inviteExpiresAt DateTime?
+
   refreshTokens RefreshToken[]
 
   createdAt    DateTime @default(now())

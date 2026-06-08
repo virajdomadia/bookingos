@@ -31,11 +31,21 @@ const KPIS = [
   { key: "pending" as const, label: "Awaiting confirmation", icon: ClockIcon, tone: "text-warning-foreground" },
 ];
 
-const NAV_ITEMS = [
-  { href: "/admin/bookings", label: "Bookings", icon: CalendarDaysIcon, description: "View and manage appointments" },
-  { href: "/admin/services", label: "Services", icon: SettingsIcon, description: "Your bookable services and pricing" },
-  { href: "/admin/schedule", label: "Schedule & Branding", icon: SlidersHorizontalIcon, description: "Hours, breaks, timezone, logo" },
-  { href: "/admin/staff", label: "Staff", icon: UsersIcon, description: "Team members and roles", comingSoon: true },
+type Role = "OWNER" | "ADMIN" | "STAFF";
+
+// `roles` mirrors the AdminShell nav + API guards: STAFF sees only bookings,
+// Services/Schedule are OWNER+ADMIN, and Staff management is OWNER only.
+const NAV_ITEMS: {
+  href: string;
+  label: string;
+  icon: typeof CalendarDaysIcon;
+  description: string;
+  roles: Role[];
+}[] = [
+  { href: "/admin/bookings", label: "Bookings", icon: CalendarDaysIcon, description: "View and manage appointments", roles: ["OWNER", "ADMIN", "STAFF"] },
+  { href: "/admin/services", label: "Services", icon: SettingsIcon, description: "Your bookable services and pricing", roles: ["OWNER", "ADMIN"] },
+  { href: "/admin/schedule", label: "Schedule & Branding", icon: SlidersHorizontalIcon, description: "Hours, breaks, timezone, logo", roles: ["OWNER", "ADMIN"] },
+  { href: "/admin/staff", label: "Staff", icon: UsersIcon, description: "Team members and roles", roles: ["OWNER"] },
 ];
 
 export default function AdminDashboard() {
@@ -72,26 +82,10 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* Navigation grid */}
+      {/* Navigation grid — only the sections this role can access */}
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {NAV_ITEMS.map(({ href, label, icon: Icon, description, comingSoon }) =>
-          comingSoon ? (
-            <div
-              key={href}
-              className="flex items-start gap-4 rounded-xl border border-dashed border-border bg-card/50 p-5"
-            >
-              <span className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                <Icon className="size-5" />
-              </span>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <p className="font-medium text-foreground">{label}</p>
-                  <Badge variant="secondary">Coming soon</Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">{description}</p>
-              </div>
-            </div>
-          ) : (
+        {NAV_ITEMS.filter(({ roles }) => !user || roles.includes(user.role as Role)).map(
+          ({ href, label, icon: Icon, description }) => (
             <Link
               key={href}
               href={href}

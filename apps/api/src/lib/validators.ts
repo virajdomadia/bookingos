@@ -146,6 +146,35 @@ export const bookingStatusPatchSchema = z.object({
   adminNotes: z.string().trim().max(1000).optional(),
 });
 
+// ---------------------------------------------------------------------------
+// Staff management (F8)
+// ---------------------------------------------------------------------------
+
+// The owner can only invite/assign ADMIN or STAFF. OWNER is reserved for the
+// account provisioned with the tenant and is never settable through this flow.
+export const INVITABLE_ROLES = ["ADMIN", "STAFF"] as const;
+
+export const staffInviteSchema = z.object({
+  email: z.string().trim().email("Enter a valid email").max(254),
+  role: z.enum(INVITABLE_ROLES).optional().default("STAFF"),
+});
+
+export const staffUpdateSchema = z
+  .object({
+    isActive: z.boolean().optional(),
+    role: z.enum(INVITABLE_ROLES).optional(),
+  })
+  .refine((d) => d.isActive !== undefined || d.role !== undefined, {
+    message: "Provide at least one field to update",
+  });
+
+export const acceptInviteSchema = z.object({
+  token: z.string().min(1, "Invite token is required").max(128),
+  // Full validation (strength rules) happens in the route via validatePassword;
+  // this is just the outer length guard, matching the login schema's cap.
+  password: z.string().min(1, "Password is required").max(1000),
+});
+
 export interface EffectiveSchedule {
   workStart: string;
   workEnd: string;

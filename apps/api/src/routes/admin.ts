@@ -2,9 +2,12 @@ import { Router, Request, Response } from "express";
 import type { Router as ExpressRouter } from "express";
 import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
+import crypto from "crypto";
 import { authMiddleware, requireRole } from "../middleware/auth.js";
 import prisma from "../lib/prisma.js";
 import { withTenant } from "../lib/tenantDb.js";
+import { hashPassword } from "../utils/password.js";
+import { hashToken } from "../utils/jwt.js";
 import {
   serviceCreateSchema,
   serviceUpdateSchema,
@@ -13,14 +16,22 @@ import {
   validateScheduleCoherence,
   bookingListQuerySchema,
   bookingStatusPatchSchema,
+  staffInviteSchema,
+  staffUpdateSchema,
 } from "../lib/validators.js";
 import { ApiError, ErrorCode } from "../types/api.js";
+import { getZonedDateParts, zonedDayRangeUtc } from "@booking-os/utils";
 import {
   sendBookingConfirmed,
   sendBookingCancelled,
+  sendStaffInvite,
   type BookingEmailData,
   type TenantEmailData,
 } from "../lib/email.js";
+
+const FRONTEND_URL = process.env.FRONTEND_URL ?? "http://localhost:3000";
+// Invite links are valid for 7 days, matching the refresh-token lifetime.
+const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const router: ExpressRouter = Router();
 
@@ -41,11 +52,29 @@ const sendValidationError = (res: Response, error: ZodError) => {
   sendError(res, 400, error.errors[0]?.message ?? "Invalid request", ErrorCode.VALIDATION_ERROR);
 };
 
+/**
+ * The IANA timezone the tenant operates in. Day/week boundaries and date filters
+ * must be computed in this zone, not UTC, or counts land in the wrong bucket for
+ * any non-UTC tenant. Schedule is RLS-protected, so read it inside the context.
+ */
+const getTenantTimezone = async (tenantId: string): Promise<string> =>
+  withTenant(tenantId, (tx) =>
+    tx.schedule.findUnique({ where: { tenantId }, select: { timezone: true } })
+  )
+    .then((s) => s?.timezone ?? "Asia/Kolkata")
+    .catch(() => "Asia/Kolkata");
+
+/** Parse a validated "YYYY-MM-DD" string into numeric parts. */
+const parseYmd = (date: string): { year: number; month: number; day: number } => {
+  const [year, month, day] = date.split("-").map(Number);
+  return { year, month, day };
+};
+
 // ============================================================================
 // GET /admin/schedule
 // ============================================================================
 
-router.get("/schedule", async (req: Request, res: Response) => {
+router.get("/schedule", requireRole(["OWNER", "ADMIN"]), async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId!;
     const schedule = await withTenant(tenantId, (tx) =>
@@ -122,7 +151,7 @@ router.put("/schedule", requireRole(["OWNER", "ADMIN"]), async (req: Request, re
 // GET /admin/services
 // ============================================================================
 
-router.get("/services", async (req: Request, res: Response) => {
+router.get("/services", requireRole(["OWNER", "ADMIN"]), async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId!;
     const services = await withTenant(tenantId, (tx) =>
@@ -205,7 +234,7 @@ router.put("/services/:id", requireRole(["OWNER", "ADMIN"]), async (req: Request
 // DELETE /admin/services/:id  (soft delete)
 // ============================================================================
 
-router.delete("/services/:id", requireRole(["OWNER", "ADMIN"]), async (req: Request, res: Response) => {
+router.delete("/services/:id", requireRole(["OWNER"]), async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId!;
     const { id } = req.params;
@@ -279,20 +308,22 @@ router.put("/tenant", requireRole(["OWNER"]), async (req: Request, res: Response
 // GET /admin/stats  — KPI counts for dashboard
 // ============================================================================
 
-router.get("/stats", async (req: Request, res: Response) => {
+router.get("/stats", requireRole(["OWNER", "ADMIN", "STAFF"]), async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId!;
-    const now = new Date();
 
-    // Today: midnight → 23:59:59 UTC (close enough for server-side counts)
-    const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+    // Day/week windows are computed in the tenant's timezone, not UTC, so a
+    // booking near midnight is counted under the correct local day.
+    const timezone = await getTenantTimezone(tenantId);
+    const { year, month, day, weekday } = getZonedDateParts(timezone);
 
-    // This week: Monday → Sunday
-    const dayOfWeek = now.getUTCDay(); // 0=Sun … 6=Sat
-    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    const weekStart = new Date(todayStart.getTime() - daysFromMonday * 24 * 60 * 60 * 1000);
-    const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+    // Today: tenant-local midnight → next tenant-local midnight.
+    const { start: todayStart, end: todayEnd } = zonedDayRangeUtc(year, month, day, timezone);
+
+    // This week: Monday → Sunday, anchored to the tenant-local week.
+    const daysFromMonday = weekday === 0 ? 6 : weekday - 1; // 0=Sun … 6=Sat
+    const { start: weekStart } = zonedDayRangeUtc(year, month, day - daysFromMonday, timezone);
+    const { start: weekEnd } = zonedDayRangeUtc(year, month, day - daysFromMonday + 7, timezone);
 
     // Booking is RLS-protected (FORCE) — these counts must run inside a tenant
     // context, otherwise the policy filters every row and they all return 0.
@@ -331,9 +362,19 @@ router.get("/bookings", async (req: Request, res: Response) => {
     if (query.status) where.status = query.status;
     if (query.serviceId) where.serviceId = query.serviceId;
     if (query.dateFrom || query.dateTo) {
+      // dateFrom/dateTo are calendar days in the tenant's timezone. Resolve them
+      // to UTC instants in that zone (inclusive from-day start, exclusive
+      // day-after-to start), or a +5:30 tenant's filter is off by the offset.
+      const timezone = await getTenantTimezone(tenantId);
       where.startsAt = {
-        ...(query.dateFrom && { gte: new Date(query.dateFrom) }),
-        ...(query.dateTo && { lt: new Date(new Date(query.dateTo).getTime() + 24 * 60 * 60 * 1000) }),
+        ...(query.dateFrom && (() => {
+          const { year, month, day } = parseYmd(query.dateFrom);
+          return { gte: zonedDayRangeUtc(year, month, day, timezone).start };
+        })()),
+        ...(query.dateTo && (() => {
+          const { year, month, day } = parseYmd(query.dateTo);
+          return { lt: zonedDayRangeUtc(year, month, day, timezone).end };
+        })()),
       };
     }
 
@@ -508,5 +549,275 @@ router.patch(
     }
   }
 );
+
+// ============================================================================
+// STAFF MANAGEMENT (F8) — OWNER only.
+// ============================================================================
+//
+// The User table is intentionally NOT under RLS (the unauthenticated auth flow
+// and super-admin provisioning must read/write it before any tenant context
+// exists). So these handlers use the base prisma client with an explicit
+// `where: { tenantId }` on every query as the isolation guard.
+
+type StaffUserRow = {
+  id: string;
+  email: string;
+  role: string;
+  isActive: boolean;
+  inviteTokenHash: string | null;
+  inviteExpiresAt: Date | null;
+  createdAt: Date;
+};
+
+type StaffStatus = "ACTIVE" | "DEACTIVATED" | "INVITE_PENDING" | "INVITE_EXPIRED";
+
+/** Shape a User row into the staff list item the dashboard renders. */
+function toStaffMember(u: StaffUserRow) {
+  const pendingInvite = u.inviteTokenHash !== null;
+  const inviteExpired =
+    pendingInvite && u.inviteExpiresAt !== null && u.inviteExpiresAt.getTime() < Date.now();
+  const status: StaffStatus = pendingInvite
+    ? inviteExpired
+      ? "INVITE_EXPIRED"
+      : "INVITE_PENDING"
+    : u.isActive
+      ? "ACTIVE"
+      : "DEACTIVATED";
+  return {
+    id: u.id,
+    email: u.email,
+    role: u.role,
+    isActive: u.isActive,
+    status,
+    inviteExpiresAt: u.inviteExpiresAt,
+    createdAt: u.createdAt,
+  };
+}
+
+const STAFF_SELECT = {
+  id: true,
+  email: true,
+  role: true,
+  isActive: true,
+  inviteTokenHash: true,
+  inviteExpiresAt: true,
+  createdAt: true,
+} as const;
+
+/** Build the TenantEmailData an invite email needs (branding + timezone). */
+async function tenantEmailData(tenantId: string): Promise<TenantEmailData | null> {
+  const tenant = await prisma.tenant
+    .findUnique({
+      where: { id: tenantId },
+      select: { id: true, name: true, slug: true, primaryColor: true },
+    })
+    .catch(() => null);
+  if (!tenant) return null;
+  return { ...tenant, timezone: await getTenantTimezone(tenantId) };
+}
+
+// ----------------------------------------------------------------------------
+// GET /admin/staff — list all team members (active, deactivated, pending)
+// ----------------------------------------------------------------------------
+
+router.get("/staff", requireRole(["OWNER"]), async (req: Request, res: Response) => {
+  try {
+    const users = await prisma.user.findMany({
+      where: { tenantId: req.tenantId! },
+      orderBy: { createdAt: "asc" },
+      select: STAFF_SELECT,
+    });
+    res.json({ data: users.map(toStaffMember) });
+  } catch (error) {
+    console.error("List staff error:", error);
+    sendError(res, 500, "Failed to load staff", ErrorCode.INTERNAL_ERROR);
+  }
+});
+
+// ----------------------------------------------------------------------------
+// POST /admin/staff/invite — create a pending invitee + email the invite link
+// ----------------------------------------------------------------------------
+
+router.post("/staff/invite", requireRole(["OWNER"]), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const input = staffInviteSchema.parse(req.body);
+    const email = input.email.toLowerCase().trim();
+
+    // Friendly pre-check; the unique constraint below is the real TOCTOU guard.
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      return sendError(res, 409, "That email already has an account", ErrorCode.EMAIL_TAKEN);
+    }
+
+    // Raw token goes in the email link only; the DB stores its SHA-256 so a DB
+    // leak does not yield usable invite links (same posture as refresh tokens).
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    // Placeholder password the invitee can never use: it's a hash of random
+    // bytes and isActive=false blocks login until accept-invite sets a real one.
+    const placeholderHash = await hashPassword(crypto.randomBytes(24).toString("hex"));
+
+    const user = await prisma.user.create({
+      data: {
+        tenantId,
+        email,
+        role: input.role,
+        isActive: false,
+        passwordHash: placeholderHash,
+        inviteTokenHash: hashToken(rawToken),
+        inviteExpiresAt: new Date(Date.now() + INVITE_TTL_MS),
+      },
+      select: STAFF_SELECT,
+    });
+
+    const tenant = await tenantEmailData(tenantId);
+    if (!tenant) {
+      await prisma.user.delete({ where: { id: user.id } }).catch(() => {});
+      return sendError(res, 500, "Failed to send invite", ErrorCode.INTERNAL_ERROR);
+    }
+
+    // Unlike booking emails, the invite IS the deliverable — if it can't be sent,
+    // roll back the pending invite rather than leave one the recipient never got.
+    try {
+      await sendStaffInvite({
+        to: email,
+        inviteUrl: `${FRONTEND_URL}/accept-invite/${rawToken}`,
+        tenant,
+        role: input.role,
+      });
+    } catch (err) {
+      console.error("[staff] invite email failed:", err);
+      await prisma.user.delete({ where: { id: user.id } }).catch(() => {});
+      return sendError(res, 502, "Couldn't send the invite email. Please try again.", ErrorCode.INTERNAL_ERROR);
+    }
+
+    res.status(201).json({ data: toStaffMember(user) });
+  } catch (error) {
+    if (error instanceof ZodError) return sendValidationError(res, error);
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return sendError(res, 409, "That email already has an account", ErrorCode.EMAIL_TAKEN);
+    }
+    console.error("Invite staff error:", error);
+    sendError(res, 500, "Failed to invite staff", ErrorCode.INTERNAL_ERROR);
+  }
+});
+
+// ----------------------------------------------------------------------------
+// POST /admin/staff/:id/resend — regenerate token + re-send a pending invite
+// ----------------------------------------------------------------------------
+
+router.post("/staff/:id/resend", requireRole(["OWNER"]), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const target = await prisma.user.findFirst({
+      where: { id: req.params.id, tenantId },
+      select: STAFF_SELECT,
+    });
+    if (!target) return sendError(res, 404, "Staff member not found", ErrorCode.NOT_FOUND);
+    if (!target.inviteTokenHash) {
+      return sendError(res, 409, "This member has already accepted their invite", ErrorCode.CONFLICT);
+    }
+
+    const tenant = await tenantEmailData(tenantId);
+    if (!tenant) return sendError(res, 500, "Failed to send invite", ErrorCode.INTERNAL_ERROR);
+
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const updated = await prisma.user.update({
+      where: { id: target.id },
+      data: {
+        inviteTokenHash: hashToken(rawToken),
+        inviteExpiresAt: new Date(Date.now() + INVITE_TTL_MS),
+      },
+      select: STAFF_SELECT,
+    });
+
+    try {
+      await sendStaffInvite({
+        to: target.email,
+        inviteUrl: `${FRONTEND_URL}/accept-invite/${rawToken}`,
+        tenant,
+        role: target.role,
+      });
+    } catch (err) {
+      console.error("[staff] resend invite email failed:", err);
+      return sendError(res, 502, "Couldn't send the invite email. Please try again.", ErrorCode.INTERNAL_ERROR);
+    }
+
+    res.json({ data: toStaffMember(updated) });
+  } catch (error) {
+    console.error("Resend invite error:", error);
+    sendError(res, 500, "Failed to resend invite", ErrorCode.INTERNAL_ERROR);
+  }
+});
+
+// ----------------------------------------------------------------------------
+// PATCH /admin/staff/:id — change role and/or activate/deactivate
+// ----------------------------------------------------------------------------
+
+router.patch("/staff/:id", requireRole(["OWNER"]), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const input = staffUpdateSchema.parse(req.body);
+
+    const target = await prisma.user.findFirst({
+      where: { id: req.params.id, tenantId },
+      select: STAFF_SELECT,
+    });
+    if (!target) return sendError(res, 404, "Staff member not found", ErrorCode.NOT_FOUND);
+
+    // The owner account is provisioned with the tenant and is not manageable
+    // here — this also prevents the owner from locking themselves out.
+    if (target.role === "OWNER") {
+      return sendError(res, 403, "The owner account can't be modified", ErrorCode.FORBIDDEN);
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: target.id },
+      data: {
+        ...(input.isActive !== undefined && { isActive: input.isActive }),
+        ...(input.role !== undefined && { role: input.role }),
+      },
+      select: STAFF_SELECT,
+    });
+
+    res.json({ data: toStaffMember(updated) });
+  } catch (error) {
+    if (error instanceof ZodError) return sendValidationError(res, error);
+    console.error("Update staff error:", error);
+    sendError(res, 500, "Failed to update staff", ErrorCode.INTERNAL_ERROR);
+  }
+});
+
+// ----------------------------------------------------------------------------
+// DELETE /admin/staff/:id — revoke a still-pending invite
+// ----------------------------------------------------------------------------
+
+router.delete("/staff/:id", requireRole(["OWNER"]), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const target = await prisma.user.findFirst({
+      where: { id: req.params.id, tenantId },
+      select: STAFF_SELECT,
+    });
+    if (!target) return sendError(res, 404, "Staff member not found", ErrorCode.NOT_FOUND);
+
+    // Hard-delete is only for invites never accepted. Accepted accounts may own
+    // historical data references; deactivate those instead of deleting.
+    if (!target.inviteTokenHash) {
+      return sendError(
+        res,
+        409,
+        "This member has accepted their invite — deactivate them instead",
+        ErrorCode.CONFLICT
+      );
+    }
+
+    await prisma.user.delete({ where: { id: target.id } });
+    res.json({ data: { message: "Invite revoked" } });
+  } catch (error) {
+    console.error("Revoke invite error:", error);
+    sendError(res, 500, "Failed to revoke invite", ErrorCode.INTERNAL_ERROR);
+  }
+});
 
 export default router;

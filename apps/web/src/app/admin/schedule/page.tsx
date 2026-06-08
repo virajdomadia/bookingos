@@ -176,7 +176,7 @@ export default function SchedulePage() {
   };
 
   return (
-    <AdminShell active="schedule" title="Schedule & branding">
+    <AdminShell active="schedule" title="Schedule & branding" allow={["OWNER", "ADMIN"]}>
       <div className="space-y-4">
         {error && (
           <Alert variant="destructive" className="border-destructive/30 bg-destructive/5">

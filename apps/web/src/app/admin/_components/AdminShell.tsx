@@ -8,6 +8,7 @@ import {
   CalendarDaysIcon,
   SettingsIcon,
   SlidersHorizontalIcon,
+  UsersIcon,
   LogOutIcon,
   CalendarCheckIcon,
 } from "lucide-react";
@@ -16,7 +17,8 @@ import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export type AdminSection = "dashboard" | "bookings" | "services" | "schedule";
+export type AdminSection = "dashboard" | "bookings" | "services" | "schedule" | "staff";
+type Role = "OWNER" | "ADMIN" | "STAFF";
 
 interface TenantInfo {
   name: string;
@@ -24,11 +26,15 @@ interface TenantInfo {
   primaryColor?: string;
 }
 
-const NAV: { id: AdminSection; href: string; label: string; icon: typeof LayoutDashboardIcon }[] = [
-  { id: "dashboard", href: "/admin", label: "Dashboard", icon: LayoutDashboardIcon },
-  { id: "bookings", href: "/admin/bookings", label: "Bookings", icon: CalendarDaysIcon },
-  { id: "services", href: "/admin/services", label: "Services", icon: SettingsIcon },
-  { id: "schedule", href: "/admin/schedule", label: "Schedule", icon: SlidersHorizontalIcon },
+// `roles` is the allow-list that can see each section. STAFF is intentionally
+// limited to the dashboard and bookings; Services/Schedule are OWNER+ADMIN and
+// Staff management is OWNER only — mirroring the API's requireRole guards.
+const NAV: { id: AdminSection; href: string; label: string; icon: typeof LayoutDashboardIcon; roles: Role[] }[] = [
+  { id: "dashboard", href: "/admin", label: "Dashboard", icon: LayoutDashboardIcon, roles: ["OWNER", "ADMIN", "STAFF"] },
+  { id: "bookings", href: "/admin/bookings", label: "Bookings", icon: CalendarDaysIcon, roles: ["OWNER", "ADMIN", "STAFF"] },
+  { id: "services", href: "/admin/services", label: "Services", icon: SettingsIcon, roles: ["OWNER", "ADMIN"] },
+  { id: "schedule", href: "/admin/schedule", label: "Schedule", icon: SlidersHorizontalIcon, roles: ["OWNER", "ADMIN"] },
+  { id: "staff", href: "/admin/staff", label: "Staff", icon: UsersIcon, roles: ["OWNER"] },
 ];
 
 interface AdminShellProps {
@@ -36,13 +42,19 @@ interface AdminShellProps {
   title?: string;
   actions?: ReactNode;
   children: ReactNode;
+  /**
+   * Roles allowed to view this page. If the signed-in user's role isn't listed,
+   * they're redirected to the dashboard. The API enforces this server-side too;
+   * this just avoids rendering a page that would only 403.
+   */
+  allow?: Role[];
 }
 
 /**
  * Shared chrome for every /admin page: auth gate, branded top bar, and a
  * horizontal section nav. Pages render only their content inside.
  */
-export function AdminShell({ active, title, actions, children }: AdminShellProps) {
+export function AdminShell({ active, title, actions, children, allow }: AdminShellProps) {
   const router = useRouter();
   const { accessToken, user, isLoading, logout } = useAuth();
   const [tenant, setTenant] = useState<TenantInfo | null>(null);
@@ -50,6 +62,13 @@ export function AdminShell({ active, title, actions, children }: AdminShellProps
   useEffect(() => {
     if (!isLoading && !accessToken) router.push("/auth");
   }, [accessToken, isLoading, router]);
+
+  // Role gate: bounce a user who lacks access to this page back to the dashboard.
+  useEffect(() => {
+    if (!isLoading && user && allow && !allow.includes(user.role as Role)) {
+      router.replace("/admin");
+    }
+  }, [isLoading, user, allow, router]);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -73,7 +92,11 @@ export function AdminShell({ active, title, actions, children }: AdminShellProps
     );
   }
   if (!accessToken || !user) return null;
+  // Don't flash a page the user will be redirected away from.
+  if (allow && !allow.includes(user.role as Role)) return null;
 
+  const role = user.role as Role;
+  const navItems = NAV.filter((item) => item.roles.includes(role));
   const accent = tenant?.primaryColor ?? "#4F46E5";
 
   return (
@@ -109,7 +132,7 @@ export function AdminShell({ active, title, actions, children }: AdminShellProps
         {/* Section nav */}
         <nav className="mx-auto max-w-6xl px-2 sm:px-4">
           <ul className="flex items-center gap-1 overflow-x-auto">
-            {NAV.map(({ id, href, label, icon: Icon }) => {
+            {navItems.map(({ id, href, label, icon: Icon }) => {
               const isActive = id === active;
               return (
                 <li key={id}>

@@ -151,6 +151,7 @@ export default function ServicesPage() {
     <AdminShell
       active="services"
       title="Services"
+      allow={["OWNER", "ADMIN"]}
       actions={
         <Button onClick={openCreate}>
           <PlusIcon className="size-4" />
